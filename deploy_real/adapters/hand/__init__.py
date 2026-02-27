@@ -1,0 +1,1 @@
+# Hand adapters package marker.

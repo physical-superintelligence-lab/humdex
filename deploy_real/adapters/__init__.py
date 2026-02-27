@@ -1,0 +1,1 @@
+# Adapter layer package marker.

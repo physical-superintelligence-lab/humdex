@@ -1,0 +1,11 @@
+# TWIST2 Minimal Visualization Dependencies
+
+# Core dependencies
+mujoco>=3.0.0
+numpy>=1.20.0
+torch>=2.0.0
+onnxruntime>=1.15.0
+
+# Video saving
+imageio>=2.25.0
+imageio-ffmpeg>=0.4.8

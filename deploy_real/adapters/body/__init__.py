@@ -1,0 +1,1 @@
+# Body adapters package marker.
