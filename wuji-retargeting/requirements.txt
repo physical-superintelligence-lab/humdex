@@ -1,0 +1,7 @@
+numpy>=1.21.0
+wujihandpy
+avp_stream
+mujoco
+pin==3.4.0
+nlopt
+pyyaml
