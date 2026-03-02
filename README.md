@@ -81,29 +81,24 @@ Supported selectors:
 - `--body {vdmocap|slimevr}` (default `vdmocap`)
 - `--hand {vdhand|manus}` (default `vdhand`)
 
-Execution mode:
-
-- `--dry-run` (default): print resolved pipeline only
-- `--run`: execute pipeline
-
 ### 2) Common Examples
 
 Run default combo:
 
 ```bash
-bash teleop.sh --run
+bash teleop.sh
 ```
 
 Run sonic + vdmocap + manus:
 
 ```bash
-bash teleop.sh --policy sonic --body vdmocap --hand manus --run
+bash teleop.sh --policy sonic --body vdmocap --hand manus
 ```
 
 Run twist2 + slimevr + vdhand:
 
 ```bash
-bash teleop.sh --policy twist2 --body slimevr --hand vdhand --run
+bash teleop.sh --policy twist2 --body slimevr --hand vdhand
 ```
 
 ### 3) Config Files

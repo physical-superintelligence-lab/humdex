@@ -20,14 +20,12 @@ Options:
   --body {vdmocap|slimevr}
   --hand {vdhand|manus}
 
-  --dry-run                          default behavior (print only)
-  --run                              execute resolved command(s)
   -h, --help
 
 Examples:
   bash teleop.sh
   bash teleop.sh --policy sonic --body slimevr --hand manus
-  bash teleop.sh --policy sonic --body_source vdmocap --hand_source vdhand --run -- --redis_ip localhost
+  bash teleop.sh --policy sonic --body_source vdmocap --hand_source vdhand -- --redis_ip localhost
 EOF
 }
 

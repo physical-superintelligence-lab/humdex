@@ -12,8 +12,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--policy", choices=["twist2", "sonic"], default="twist2")
     parser.add_argument("--body_source", "--body", dest="body_source", choices=["vdmocap", "slimevr"], default="vdmocap")
     parser.add_argument("--hand_source", "--hand", dest="hand_source", choices=["vdhand", "manus"], default="vdhand")
-    parser.add_argument("--dry-run", action="store_true", help="Print resolved command(s) only.")
-    parser.add_argument("--run", action="store_true", help="Execute resolved command(s).")
     parser.add_argument("passthrough", nargs=argparse.REMAINDER, help="Arguments after '--' will be forwarded.")
     return parser.parse_args()
 
@@ -47,17 +45,13 @@ def main() -> int:
     if passthrough:
         print(f"[teleop] passthrough={passthrough}")
 
-    if bool(args.run) and (not bool(args.dry_run)):
-        pipeline = build_pipeline_instance(
-            policy=args.policy,
-            body_source=args.body_source,
-            hand_source=args.hand_source,
-            passthrough=passthrough,
-        )
-        return int(pipeline.run())
-
-    print("[teleop] dry-run mode: showing unified pipeline skeleton only.")
-    return 0
+    pipeline = build_pipeline_instance(
+        policy=args.policy,
+        body_source=args.body_source,
+        hand_source=args.hand_source,
+        passthrough=passthrough,
+    )
+    return int(pipeline.run())
 
 
 if __name__ == "__main__":
