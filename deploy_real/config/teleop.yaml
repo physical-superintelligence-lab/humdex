@@ -1,0 +1,92 @@
+runtime:
+  target_fps: 50.0
+  measure_fps: 1
+  print_every: 120
+  max_steps: 100000000000
+  dry_run: false
+
+network:
+  redis:
+    ip: "localhost"
+  mocap:
+    default:
+      ip: "192.168.1.111"
+      port: 7000
+      index: 0
+      world_space: 0
+      local_port: 0
+    body:
+      ip: "192.168.1.111"
+      port: 7000
+      index: 0
+    hand:
+      ip: "192.168.1.111"
+      port: 7000
+      index: 1
+
+retarget:
+  actual_human_height: 1.45
+  hands: "both"
+  format: "nokov"
+  offset_to_ground: true
+  safe_idle_pose_id: "2"
+  ramp_ease: "cosine"
+  start_ramp_seconds: 3.0
+  toggle_ramp_seconds: 3.0
+  exit_ramp_seconds: 3.0
+  smooth: false
+  smooth_window_size: 5
+  control_neck: false
+  neck_retarget_scale: 1.5
+
+control:
+  keyboard_toggle_send: true
+  keyboard_backend: "stdin"
+  toggle_send_key: "k"
+  hold_position_key: "p"
+  hand_source_timeout_s: 0.5
+  evdev_device: "auto"
+  evdev_grab: false
+  control_gripper_hand_action: false
+  pinch_mode: false
+  hand_step: 0.05
+
+adapters:
+  vdmocap: {}
+  vdhand:
+    hand_fk: true
+    hand_fk_end_site_scale: "0.858,0.882,0.882,0.882,0.882"
+    publish_bvh_hand: true
+  manus:
+    address: "tcp://localhost:8000"
+    left_sn: "85ab6e24"
+    right_sn: "c152afa7"
+    auto_assign: true
+    recv_timeout_ms: 20
+    flip_x: true
+  slimevr:
+    vmc_ip: "0.0.0.0"
+    vmc_port: 39539
+    vmc_timeout_s: 0.5
+    vmc_rot_mode: "local"
+    vmc_invert_zw: false
+    vmc_use_fk: true
+    vmc_use_viewer_fk: true
+    vmc_fk_skeleton: "bvh"
+    vmc_bvh_path: "assets/slimevr/bvh-recording.bvh"
+    vmc_bvh_scale: 0.01
+    vmc_viewer_bone_axis_override: "Hips:flip=yz;Spine:flip=yz;Spine1:flip=yz;Neck:flip=yz;Head:flip=yz;LeftUpperArm:flip=x;RightUpperArm:flip=x;LeftLowerArm:flip=x;RightLowerArm:flip=x;LeftHand:flip=x;RightHand:flip=x;LeftUpperLeg:flip=x;RightUpperLeg:flip=x;LeftLowerLeg:flip=x;RightLowerLeg:flip=x;LeftFoot:flip=x;RightFoot:flip=x"
+
+policy:
+  sonic:
+    enable_zmq_pose: true
+    zmq_bind_host: "0.0.0.0"
+    zmq_pose_port: 5556
+    zmq_pose_topic: "pose"
+    zmq_num_frames_to_send: 1
+    zmq_frame_index_step: 2
+    zmq_use_mailbox: true
+    zmq_heading_increment: 0.0
+    zmq_catch_up: true
+    zmq_include_hand_joints: true
+  twist2: {}

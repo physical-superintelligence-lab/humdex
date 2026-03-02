@@ -1,7 +1,7 @@
 # HumDex: Humanoid Dexterous Manipulation Made Easy
 By Liang Heng, Yihe Tang, Jiajun Xu, Henghui Bao, Di Huang, Yue Wang
 
-![Banner for TWIST](./assets/HumDex.png)
+![Banner for HumDex](./assets/HumDex.png)
 
 ## Content Table
 
@@ -104,19 +104,19 @@ bash teleop.sh --policy twist2 --body slimevr --hand vdhand
 
 ### 3) Config Files
 
-Main YAMLs:
+Main YAML:
 
-- `deploy_real/config/teleop_twist2_vdmocap_vdhand.yaml`
-- `deploy_real/config/teleop_sonic_vdmocap_vdhand.yaml`
+- `deploy_real/config/teleop.yaml`
 
-These YAMLs contain runtime parameters (target fps, ramp durations, hand mode, source ports, etc.).
+Config Structure:
 
-Current notable fields:
+- `runtime`: loop settings like `target_fps`, `measure_fps`, `print_every`, `max_steps`, `dry_run`
+- `network`: redis + mocap transport (`network.redis`, `network.mocap.default/body/hand`)
+- `retarget`: retarget/ramp/smoothing settings
+- `control`: keyboard and hand-control toggles
+- `adapters`: source-specific settings (`vdmocap`, `vdhand`, `manus`, `slimevr`)
+- `policy`: policy-specific settings (`policy.sonic`, `policy.twist2`)
 
-- Ramp: `start_ramp_seconds`, `toggle_ramp_seconds`, `exit_ramp_seconds`, `ramp_ease`
-- Manus: `manus_address`, `manus_left_sn`, `manus_right_sn`, `manus_auto_assign`
-- SlimeVR/VMC: `vmc_ip`, `vmc_port`, `vmc_use_fk`, `vmc_bvh_path`
-- Loop: `print_every`, `max_steps`
 
 ### 4) Keyboard Behavior
 

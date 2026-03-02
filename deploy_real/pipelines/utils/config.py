@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Mapping
 
 
 @dataclass
@@ -90,6 +90,156 @@ class SonicRuntimeConfig(CommonRuntimeConfig):
     zmq_include_hand_joints: bool
 
 
+_MISSING = object()
+_ALLOWED_TOP_LEVEL = {"runtime", "network", "retarget", "control", "adapters", "policy"}
+_LEGACY_FLAT_KEYS = {
+    "redis_ip",
+    "dst_ip",
+    "dst_port",
+    "local_port",
+    "mocap_index",
+    "world_space",
+    "dst_ip_body",
+    "dst_port_body",
+    "mocap_index_body",
+    "dst_ip_hand",
+    "dst_port_hand",
+    "mocap_index_hand",
+    "actual_human_height",
+    "target_fps",
+    "measure_fps",
+    "hands",
+    "format",
+    "offset_to_ground",
+    "toggle_send_key",
+    "hold_position_key",
+    "safe_idle_pose_id",
+    "ramp_ease",
+    "keyboard_toggle_send",
+    "keyboard_backend",
+    "hand_source_timeout_s",
+    "publish_bvh_hand",
+    "hand_fk",
+    "hand_fk_end_site_scale",
+    "control_neck",
+    "neck_retarget_scale",
+    "control_gripper_hand_action",
+    "pinch_mode",
+    "hand_step",
+    "smooth",
+    "smooth_window_size",
+    "print_every",
+    "dry_run",
+    "toggle_ramp_seconds",
+    "exit_ramp_seconds",
+    "start_ramp_seconds",
+    "evdev_device",
+    "evdev_grab",
+    "vmc_ip",
+    "vmc_port",
+    "vmc_timeout_s",
+    "vmc_rot_mode",
+    "vmc_invert_zw",
+    "vmc_use_fk",
+    "vmc_use_viewer_fk",
+    "vmc_fk_skeleton",
+    "vmc_bvh_path",
+    "vmc_bvh_scale",
+    "vmc_viewer_bone_axis_override",
+    "manus_address",
+    "manus_left_sn",
+    "manus_right_sn",
+    "manus_auto_assign",
+    "manus_recv_timeout_ms",
+    "manus_flip_x",
+    "enable_zmq_pose",
+    "zmq_bind_host",
+    "zmq_pose_port",
+    "zmq_pose_topic",
+    "zmq_num_frames_to_send",
+    "zmq_frame_index_step",
+    "zmq_use_mailbox",
+    "zmq_heading_increment",
+    "zmq_catch_up",
+    "zmq_include_hand_joints",
+    "max_steps",
+}
+_COMMON_REQUIRED_PATHS = [
+    "runtime.target_fps",
+    "runtime.measure_fps",
+    "runtime.print_every",
+    "runtime.max_steps",
+    "runtime.dry_run",
+    "network.redis.ip",
+    "network.mocap.default.ip",
+    "network.mocap.default.port",
+    "network.mocap.default.index",
+    "network.mocap.default.world_space",
+    "network.mocap.default.local_port",
+    "network.mocap.body.ip",
+    "network.mocap.body.port",
+    "network.mocap.body.index",
+    "network.mocap.hand.ip",
+    "network.mocap.hand.port",
+    "network.mocap.hand.index",
+    "retarget.actual_human_height",
+    "retarget.hands",
+    "retarget.format",
+    "retarget.offset_to_ground",
+    "retarget.safe_idle_pose_id",
+    "retarget.ramp_ease",
+    "retarget.start_ramp_seconds",
+    "retarget.toggle_ramp_seconds",
+    "retarget.exit_ramp_seconds",
+    "retarget.smooth",
+    "retarget.smooth_window_size",
+    "retarget.control_neck",
+    "retarget.neck_retarget_scale",
+    "control.keyboard_toggle_send",
+    "control.keyboard_backend",
+    "control.toggle_send_key",
+    "control.hold_position_key",
+    "control.hand_source_timeout_s",
+    "control.evdev_device",
+    "control.evdev_grab",
+    "control.control_gripper_hand_action",
+    "control.pinch_mode",
+    "control.hand_step",
+    "adapters.vdhand.hand_fk",
+    "adapters.vdhand.hand_fk_end_site_scale",
+    "adapters.vdhand.publish_bvh_hand",
+    "adapters.manus.address",
+    "adapters.manus.left_sn",
+    "adapters.manus.right_sn",
+    "adapters.manus.auto_assign",
+    "adapters.manus.recv_timeout_ms",
+    "adapters.manus.flip_x",
+    "adapters.slimevr.vmc_ip",
+    "adapters.slimevr.vmc_port",
+    "adapters.slimevr.vmc_timeout_s",
+    "adapters.slimevr.vmc_rot_mode",
+    "adapters.slimevr.vmc_invert_zw",
+    "adapters.slimevr.vmc_use_fk",
+    "adapters.slimevr.vmc_use_viewer_fk",
+    "adapters.slimevr.vmc_fk_skeleton",
+    "adapters.slimevr.vmc_bvh_path",
+    "adapters.slimevr.vmc_bvh_scale",
+    "adapters.slimevr.vmc_viewer_bone_axis_override",
+]
+_SONIC_REQUIRED_PATHS = [
+    "policy.sonic.enable_zmq_pose",
+    "policy.sonic.zmq_bind_host",
+    "policy.sonic.zmq_pose_port",
+    "policy.sonic.zmq_pose_topic",
+    "policy.sonic.zmq_num_frames_to_send",
+    "policy.sonic.zmq_frame_index_step",
+    "policy.sonic.zmq_use_mailbox",
+    "policy.sonic.zmq_heading_increment",
+    "policy.sonic.zmq_catch_up",
+    "policy.sonic.zmq_include_hand_joints",
+]
+
+
 def _load_yaml(passthrough: list[str], repo_root: Path, default_config: str) -> tuple[Path, Dict[str, Any]]:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config_yaml", type=str, default=default_config)
@@ -108,220 +258,176 @@ def _load_yaml(passthrough: list[str], repo_root: Path, default_config: str) -> 
     return yaml_path, yaml_cfg
 
 
-def _build_common_values(yaml_cfg: Dict[str, Any], yaml_path: Path, *, defaults: Dict[str, Any]) -> Dict[str, Any]:
-    g = lambda k: yaml_cfg.get(k, defaults[k])
+def _get_nested(cfg: Mapping[str, Any], path: str, default: Any = _MISSING) -> Any:
+    current: Any = cfg
+    for key in path.split("."):
+        if not isinstance(current, Mapping) or key not in current:
+            if default is _MISSING:
+                raise ValueError(f"Missing required config path: {path}")
+            return default
+        current = current[key]
+    return current
+
+
+def _resolve_repo_path(repo_root: Path, value: str) -> str:
+    p = Path(str(value)).expanduser()
+    if p.is_absolute():
+        return str(p)
+    return str((repo_root / p).resolve())
+
+
+def _validate_nested_schema(yaml_cfg: Dict[str, Any], yaml_path: Path) -> None:
+    if len(yaml_cfg) == 0:
+        raise ValueError(f"Config yaml is empty or invalid: {yaml_path}")
+
+    legacy = sorted(_LEGACY_FLAT_KEYS.intersection(set(yaml_cfg.keys())))
+    if legacy:
+        preview = ", ".join(legacy[:8])
+        raise ValueError(
+            "Legacy flat config keys are no longer supported. "
+            f"Found at root: {preview}. "
+            "Use nested sections: runtime/network/retarget/control/adapters/policy."
+        )
+
+    unknown = sorted(set(yaml_cfg.keys()) - _ALLOWED_TOP_LEVEL)
+    if unknown:
+        raise ValueError(
+            "Unknown top-level config sections: "
+            f"{', '.join(unknown)}. "
+            f"Allowed sections: {', '.join(sorted(_ALLOWED_TOP_LEVEL))}."
+        )
+
+    for section in sorted(_ALLOWED_TOP_LEVEL):
+        section_val = yaml_cfg.get(section)
+        if not isinstance(section_val, dict):
+            raise ValueError(f"Config section '{section}' must be a mapping/dict")
+
+    for section_path in [
+        "network.redis",
+        "network.mocap",
+        "network.mocap.default",
+        "network.mocap.body",
+        "network.mocap.hand",
+        "adapters.vdmocap",
+        "adapters.vdhand",
+        "adapters.manus",
+        "adapters.slimevr",
+    ]:
+        val = _get_nested(yaml_cfg, section_path)
+        if not isinstance(val, Mapping):
+            raise ValueError(f"Config section '{section_path}' must be a mapping/dict")
+
+
+def _assert_required_paths(yaml_cfg: Dict[str, Any], paths: list[str]) -> None:
+    missing: list[str] = []
+    for p in paths:
+        try:
+            _get_nested(yaml_cfg, p)
+        except ValueError:
+            missing.append(p)
+    if missing:
+        sample = ", ".join(missing[:8])
+        raise ValueError(f"Missing required config paths: {sample}")
+
+
+def _build_common_values(yaml_cfg: Dict[str, Any], yaml_path: Path, *, repo_root: Path) -> Dict[str, Any]:
+    g = lambda p: _get_nested(yaml_cfg, p)
     return {
         "config_yaml": str(yaml_path),
-        "redis_ip": str(g("redis_ip")),
-        "dst_ip": str(g("dst_ip")),
-        "dst_port": int(g("dst_port")),
-        "local_port": int(g("local_port")),
-        "mocap_index": int(g("mocap_index")),
-        "world_space": int(g("world_space")),
-        "dst_ip_body": str(g("dst_ip_body")),
-        "dst_port_body": int(g("dst_port_body")),
-        "mocap_index_body": int(g("mocap_index_body")),
-        "dst_ip_hand": str(g("dst_ip_hand")),
-        "dst_port_hand": int(g("dst_port_hand")),
-        "mocap_index_hand": int(g("mocap_index_hand")),
-        "actual_human_height": float(g("actual_human_height")),
-        "target_fps": float(g("target_fps")),
-        "measure_fps": int(g("measure_fps")),
-        "hands": str(g("hands")),
-        "format": str(g("format")),
-        "offset_to_ground": bool(g("offset_to_ground")),
-        "toggle_send_key": str(g("toggle_send_key")),
-        "hold_position_key": str(g("hold_position_key")),
-        "safe_idle_pose_id": str(g("safe_idle_pose_id")),
-        "ramp_ease": str(g("ramp_ease")),
-        "keyboard_toggle_send": bool(g("keyboard_toggle_send")),
-        "keyboard_backend": str(g("keyboard_backend")).strip().lower(),
-        "hand_source_timeout_s": float(g("hand_source_timeout_s")),
-        "publish_bvh_hand": bool(g("publish_bvh_hand")),
-        "hand_fk": bool(g("hand_fk")),
-        "hand_fk_end_site_scale": str(g("hand_fk_end_site_scale")),
-        "control_neck": bool(g("control_neck")),
-        "neck_retarget_scale": float(g("neck_retarget_scale")),
-        "control_gripper_hand_action": bool(g("control_gripper_hand_action")),
-        "pinch_mode": bool(g("pinch_mode")),
-        "hand_step": float(g("hand_step")),
-        "smooth": bool(g("smooth")),
-        "smooth_window_size": max(1, int(g("smooth_window_size"))),
-        "print_every": int(g("print_every")),
-        "dry_run": bool(g("dry_run")),
-        "toggle_ramp_seconds": max(0.0, float(g("toggle_ramp_seconds"))),
-        "exit_ramp_seconds": max(0.0, float(g("exit_ramp_seconds"))),
-        "start_ramp_seconds": max(0.0, float(g("start_ramp_seconds"))),
-        "evdev_device": str(g("evdev_device")),
-        "evdev_grab": bool(g("evdev_grab")),
-        "vmc_ip": str(g("vmc_ip")),
-        "vmc_port": int(g("vmc_port")),
-        "vmc_timeout_s": max(0.01, float(g("vmc_timeout_s"))),
-        "vmc_rot_mode": str(g("vmc_rot_mode")),
-        "vmc_invert_zw": bool(g("vmc_invert_zw")),
-        "vmc_use_fk": bool(g("vmc_use_fk")),
-        "vmc_use_viewer_fk": bool(g("vmc_use_viewer_fk")),
-        "vmc_fk_skeleton": str(g("vmc_fk_skeleton")),
-        "vmc_bvh_path": str(g("vmc_bvh_path")),
-        "vmc_bvh_scale": float(g("vmc_bvh_scale")),
-        "vmc_viewer_bone_axis_override": str(g("vmc_viewer_bone_axis_override")),
-        "manus_address": str(g("manus_address")),
-        "manus_left_sn": str(g("manus_left_sn")),
-        "manus_right_sn": str(g("manus_right_sn")),
-        "manus_auto_assign": bool(g("manus_auto_assign")),
-        "manus_recv_timeout_ms": max(1, int(g("manus_recv_timeout_ms"))),
-        "manus_flip_x": bool(g("manus_flip_x")),
-        "max_steps": max(1, int(g("max_steps"))),
+        "redis_ip": str(g("network.redis.ip")),
+        "dst_ip": str(g("network.mocap.default.ip")),
+        "dst_port": int(g("network.mocap.default.port")),
+        "local_port": int(g("network.mocap.default.local_port")),
+        "mocap_index": int(g("network.mocap.default.index")),
+        "world_space": int(g("network.mocap.default.world_space")),
+        "dst_ip_body": str(g("network.mocap.body.ip")),
+        "dst_port_body": int(g("network.mocap.body.port")),
+        "mocap_index_body": int(g("network.mocap.body.index")),
+        "dst_ip_hand": str(g("network.mocap.hand.ip")),
+        "dst_port_hand": int(g("network.mocap.hand.port")),
+        "mocap_index_hand": int(g("network.mocap.hand.index")),
+        "actual_human_height": float(g("retarget.actual_human_height")),
+        "target_fps": float(g("runtime.target_fps")),
+        "measure_fps": int(g("runtime.measure_fps")),
+        "hands": str(g("retarget.hands")),
+        "format": str(g("retarget.format")),
+        "offset_to_ground": bool(g("retarget.offset_to_ground")),
+        "toggle_send_key": str(g("control.toggle_send_key")),
+        "hold_position_key": str(g("control.hold_position_key")),
+        "safe_idle_pose_id": str(g("retarget.safe_idle_pose_id")),
+        "ramp_ease": str(g("retarget.ramp_ease")),
+        "keyboard_toggle_send": bool(g("control.keyboard_toggle_send")),
+        "keyboard_backend": str(g("control.keyboard_backend")).strip().lower(),
+        "hand_source_timeout_s": float(g("control.hand_source_timeout_s")),
+        "publish_bvh_hand": bool(g("adapters.vdhand.publish_bvh_hand")),
+        "hand_fk": bool(g("adapters.vdhand.hand_fk")),
+        "hand_fk_end_site_scale": str(g("adapters.vdhand.hand_fk_end_site_scale")),
+        "control_neck": bool(g("retarget.control_neck")),
+        "neck_retarget_scale": float(g("retarget.neck_retarget_scale")),
+        "control_gripper_hand_action": bool(g("control.control_gripper_hand_action")),
+        "pinch_mode": bool(g("control.pinch_mode")),
+        "hand_step": float(g("control.hand_step")),
+        "smooth": bool(g("retarget.smooth")),
+        "smooth_window_size": max(1, int(g("retarget.smooth_window_size"))),
+        "print_every": int(g("runtime.print_every")),
+        "dry_run": bool(g("runtime.dry_run")),
+        "toggle_ramp_seconds": max(0.0, float(g("retarget.toggle_ramp_seconds"))),
+        "exit_ramp_seconds": max(0.0, float(g("retarget.exit_ramp_seconds"))),
+        "start_ramp_seconds": max(0.0, float(g("retarget.start_ramp_seconds"))),
+        "evdev_device": str(g("control.evdev_device")),
+        "evdev_grab": bool(g("control.evdev_grab")),
+        "vmc_ip": str(g("adapters.slimevr.vmc_ip")),
+        "vmc_port": int(g("adapters.slimevr.vmc_port")),
+        "vmc_timeout_s": max(0.01, float(g("adapters.slimevr.vmc_timeout_s"))),
+        "vmc_rot_mode": str(g("adapters.slimevr.vmc_rot_mode")),
+        "vmc_invert_zw": bool(g("adapters.slimevr.vmc_invert_zw")),
+        "vmc_use_fk": bool(g("adapters.slimevr.vmc_use_fk")),
+        "vmc_use_viewer_fk": bool(g("adapters.slimevr.vmc_use_viewer_fk")),
+        "vmc_fk_skeleton": str(g("adapters.slimevr.vmc_fk_skeleton")),
+        "vmc_bvh_path": _resolve_repo_path(repo_root, str(g("adapters.slimevr.vmc_bvh_path"))),
+        "vmc_bvh_scale": float(g("adapters.slimevr.vmc_bvh_scale")),
+        "vmc_viewer_bone_axis_override": str(g("adapters.slimevr.vmc_viewer_bone_axis_override")),
+        "manus_address": str(g("adapters.manus.address")),
+        "manus_left_sn": str(g("adapters.manus.left_sn")),
+        "manus_right_sn": str(g("adapters.manus.right_sn")),
+        "manus_auto_assign": bool(g("adapters.manus.auto_assign")),
+        "manus_recv_timeout_ms": max(1, int(g("adapters.manus.recv_timeout_ms"))),
+        "manus_flip_x": bool(g("adapters.manus.flip_x")),
+        "max_steps": max(1, int(g("runtime.max_steps"))),
     }
 
 
 def load_twist2_runtime_config(*, passthrough: list[str], repo_root: Path) -> Twist2RuntimeConfig:
-    yaml_path, yaml_cfg = _load_yaml(passthrough, repo_root, "deploy_real/config/teleop_twist2_vdmocap_vdhand.yaml")
-    if len(yaml_cfg) == 0:
-        raise ValueError(f"Config yaml is empty or invalid: {yaml_path}")
-    defaults = {
-        "redis_ip": "localhost",
-        "dst_ip": "192.168.1.112",
-        "dst_port": 7000,
-        "local_port": 0,
-        "mocap_index": 0,
-        "world_space": 0,
-        "dst_ip_body": "",
-        "dst_port_body": 0,
-        "mocap_index_body": -1,
-        "dst_ip_hand": "",
-        "dst_port_hand": 0,
-        "mocap_index_hand": -1,
-        "actual_human_height": 1.45,
-        "target_fps": 0.0,
-        "measure_fps": 0,
-        "hands": "both",
-        "format": "nokov",
-        "offset_to_ground": False,
-        "toggle_send_key": "k",
-        "hold_position_key": "p",
-        "safe_idle_pose_id": "0",
-        "ramp_ease": "cosine",
-        "keyboard_toggle_send": False,
-        "keyboard_backend": "stdin",
-        "hand_source_timeout_s": 0.5,
-        "publish_bvh_hand": False,
-        "hand_fk": False,
-        "hand_fk_end_site_scale": "0.8",
-        "control_neck": False,
-        "neck_retarget_scale": 1.5,
-        "control_gripper_hand_action": False,
-        "pinch_mode": False,
-        "hand_step": 0.05,
-        "smooth": False,
-        "smooth_window_size": 5,
-        "print_every": 120,
-        "dry_run": False,
-        "toggle_ramp_seconds": 0.0,
-        "exit_ramp_seconds": 0.0,
-        "start_ramp_seconds": 0.0,
-        "evdev_device": "auto",
-        "evdev_grab": False,
-        "vmc_ip": "0.0.0.0",
-        "vmc_port": 39539,
-        "vmc_timeout_s": 0.5,
-        "vmc_rot_mode": "local",
-        "vmc_invert_zw": False,
-        "vmc_use_fk": True,
-        "vmc_use_viewer_fk": True,
-        "vmc_fk_skeleton": "bvh",
-        "vmc_bvh_path": "bvh-recording.bvh",
-        "vmc_bvh_scale": 0.01,
-        "vmc_viewer_bone_axis_override": "Hips:flip=yz;Spine:flip=yz;Spine1:flip=yz;Neck:flip=yz;Head:flip=yz;LeftUpperArm:flip=x;RightUpperArm:flip=x;LeftLowerArm:flip=x;RightLowerArm:flip=x;LeftHand:flip=x;RightHand:flip=x;LeftUpperLeg:flip=x;RightUpperLeg:flip=x;LeftLowerLeg:flip=x;RightLowerLeg:flip=x;LeftFoot:flip=x;RightFoot:flip=x",
-        "manus_address": "tcp://127.0.0.1:7668",
-        "manus_left_sn": "",
-        "manus_right_sn": "",
-        "manus_auto_assign": True,
-        "manus_recv_timeout_ms": 20,
-        "manus_flip_x": False,
-        "max_steps": 1,
-    }
-    return Twist2RuntimeConfig(**_build_common_values(yaml_cfg, yaml_path, defaults=defaults))
+    yaml_path, yaml_cfg = _load_yaml(passthrough, repo_root, "deploy_real/config/teleop.yaml")
+    _validate_nested_schema(yaml_cfg, yaml_path)
+    _assert_required_paths(yaml_cfg, _COMMON_REQUIRED_PATHS)
+    twist2_policy = _get_nested(yaml_cfg, "policy.twist2")
+    if not isinstance(twist2_policy, Mapping):
+        raise ValueError("Config section 'policy.twist2' must be a mapping/dict")
+    return Twist2RuntimeConfig(**_build_common_values(yaml_cfg, yaml_path, repo_root=repo_root))
 
 
 def load_sonic_runtime_config(*, passthrough: list[str], repo_root: Path) -> SonicRuntimeConfig:
-    yaml_path, yaml_cfg = _load_yaml(passthrough, repo_root, "deploy_real/config/teleop_sonic_vdmocap_vdhand.yaml")
-    defaults = {
-        "redis_ip": "localhost",
-        "dst_ip": "192.168.1.111",
-        "dst_port": 7000,
-        "local_port": 0,
-        "mocap_index": 0,
-        "world_space": 0,
-        "dst_ip_body": "",
-        "dst_port_body": 0,
-        "mocap_index_body": -1,
-        "dst_ip_hand": "",
-        "dst_port_hand": 0,
-        "mocap_index_hand": -1,
-        "actual_human_height": 1.45,
-        "target_fps": 50.0,
-        "measure_fps": 1,
-        "hands": "both",
-        "format": "nokov",
-        "offset_to_ground": True,
-        "toggle_send_key": "k",
-        "hold_position_key": "p",
-        "safe_idle_pose_id": "2",
-        "ramp_ease": "cosine",
-        "keyboard_toggle_send": True,
-        "keyboard_backend": "stdin",
-        "hand_source_timeout_s": 0.5,
-        "publish_bvh_hand": True,
-        "hand_fk": True,
-        "hand_fk_end_site_scale": "0.858,0.882,0.882,0.882,0.882",
-        "control_neck": False,
-        "neck_retarget_scale": 1.5,
-        "control_gripper_hand_action": False,
-        "pinch_mode": False,
-        "hand_step": 0.05,
-        "smooth": False,
-        "smooth_window_size": 5,
-        "print_every": 120,
-        "dry_run": False,
-        "toggle_ramp_seconds": 3.0,
-        "exit_ramp_seconds": 3.0,
-        "start_ramp_seconds": 3.0,
-        "evdev_device": "auto",
-        "evdev_grab": False,
-        "vmc_ip": "0.0.0.0",
-        "vmc_port": 39539,
-        "vmc_timeout_s": 0.5,
-        "vmc_rot_mode": "local",
-        "vmc_invert_zw": False,
-        "vmc_use_fk": True,
-        "vmc_use_viewer_fk": True,
-        "vmc_fk_skeleton": "bvh",
-        "vmc_bvh_path": "bvh-recording.bvh",
-        "vmc_bvh_scale": 0.01,
-        "vmc_viewer_bone_axis_override": "Hips:flip=yz;Spine:flip=yz;Spine1:flip=yz;Neck:flip=yz;Head:flip=yz;LeftUpperArm:flip=x;RightUpperArm:flip=x;LeftLowerArm:flip=x;RightLowerArm:flip=x;LeftHand:flip=x;RightHand:flip=x;LeftUpperLeg:flip=x;RightUpperLeg:flip=x;LeftLowerLeg:flip=x;RightLowerLeg:flip=x;LeftFoot:flip=x;RightFoot:flip=x",
-        "manus_address": "tcp://127.0.0.1:7668",
-        "manus_left_sn": "",
-        "manus_right_sn": "",
-        "manus_auto_assign": True,
-        "manus_recv_timeout_ms": 20,
-        "manus_flip_x": False,
-        "max_steps": 1,
-    }
-    common = _build_common_values(yaml_cfg, yaml_path, defaults=defaults)
-    g = lambda k, d: yaml_cfg.get(k, d)
+    yaml_path, yaml_cfg = _load_yaml(passthrough, repo_root, "deploy_real/config/teleop.yaml")
+    _validate_nested_schema(yaml_cfg, yaml_path)
+    _assert_required_paths(yaml_cfg, _COMMON_REQUIRED_PATHS + _SONIC_REQUIRED_PATHS)
+    sonic_policy = _get_nested(yaml_cfg, "policy.sonic")
+    if not isinstance(sonic_policy, Mapping):
+        raise ValueError("Config section 'policy.sonic' must be a mapping/dict")
+    common = _build_common_values(yaml_cfg, yaml_path, repo_root=repo_root)
+    g = lambda p: _get_nested(yaml_cfg, p)
     return SonicRuntimeConfig(
         **common,
-        enable_zmq_pose=bool(g("enable_zmq_pose", True)),
-        zmq_bind_host=str(g("zmq_bind_host", "0.0.0.0")),
-        zmq_pose_port=int(g("zmq_pose_port", 5556)),
-        zmq_pose_topic=str(g("zmq_pose_topic", "pose")),
-        zmq_num_frames_to_send=max(1, int(g("zmq_num_frames_to_send", 1))),
-        zmq_frame_index_step=int(g("zmq_frame_index_step", 0)),
-        zmq_use_mailbox=bool(g("zmq_use_mailbox", True)),
-        zmq_heading_increment=float(g("zmq_heading_increment", 0.0)),
-        zmq_catch_up=bool(g("zmq_catch_up", True)),
-        zmq_include_hand_joints=bool(g("zmq_include_hand_joints", True)),
+        enable_zmq_pose=bool(g("policy.sonic.enable_zmq_pose")),
+        zmq_bind_host=str(g("policy.sonic.zmq_bind_host")),
+        zmq_pose_port=int(g("policy.sonic.zmq_pose_port")),
+        zmq_pose_topic=str(g("policy.sonic.zmq_pose_topic")),
+        zmq_num_frames_to_send=max(1, int(g("policy.sonic.zmq_num_frames_to_send"))),
+        zmq_frame_index_step=int(g("policy.sonic.zmq_frame_index_step")),
+        zmq_use_mailbox=bool(g("policy.sonic.zmq_use_mailbox")),
+        zmq_heading_increment=float(g("policy.sonic.zmq_heading_increment")),
+        zmq_catch_up=bool(g("policy.sonic.zmq_catch_up")),
+        zmq_include_hand_joints=bool(g("policy.sonic.zmq_include_hand_joints")),
     )
 
 __all__ = [
