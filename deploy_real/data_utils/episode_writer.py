@@ -42,10 +42,10 @@ class EpisodeWriter():
             episode_dirs = [episode_dir for episode_dir in os.listdir(self.task_dir) if 'episode_' in episode_dir]
             episode_last = sorted(episode_dirs)[-1] if len(episode_dirs) > 0 else None
             self.episode_id = 0 if episode_last is None else int(episode_last.split('_')[-1])
-            print(f"==> task_dir directory already exist, now self.episode_id is:{self.episode_id}\n")
+            print(f"==> task_dir already exists, episode_id: {self.episode_id}\n")
         else:
             os.makedirs(self.task_dir)
-            print(f"==> episode directory does not exist, now create one.\n")
+            print("==> episode directory does not exist, creating one.\n")
 
         # Optional: video output root under task_dir
         self.videos_dir = os.path.join(self.task_dir, "videos")
@@ -128,7 +128,7 @@ class EpisodeWriter():
                 try:
                     self._process_item_data(item_data)
                 except Exception as e:
-                    print(f"Error processing item_data (idx={item_data['idx']}): {e}")
+                    print(f"[EpisodeWriter] [WARN] Error processing item_data (idx={item_data['idx']}): {e}")
                 self.item_data_queue.task_done()
             except Empty:
                 pass
@@ -165,7 +165,7 @@ class EpisodeWriter():
             color_name = f'{str(idx).zfill(6)}.jpg'
             save_path = os.path.join(self.rgb_dir, color_name)
             if not cv2.imwrite(save_path, rgb):
-                print(f"Failed to save rgb image.")
+                print(f"[EpisodeWriter] [WARN] Failed to save rgb image: {save_path}")
             item_data['rgb'] = str(Path(save_path).relative_to(Path(self.json_path).parent))
             
                 
@@ -191,15 +191,15 @@ class EpisodeWriter():
         # Update episode data
         self.episode_data.append(item_data)
 
-        curent_record_time = time.time()
-        print(f"==> episode_id:{self.episode_id}  item_id:{self.item_id}  current_time:{curent_record_time}")
+        current_record_time = time.time()
+        print(f"==> episode_id:{self.episode_id}  item_id:{self.item_id}  current_time:{current_record_time}")
 
     def save_episode(self):
         """
         Trigger the save operation. This sets the save flag, and the process_queue thread will handle it.
         """
         self.need_save = True  # Set the save flag
-        print(f"==> Episode saved start...")
+        print("==> Episode save started...")
 
     def _save_episode(self):
         """
@@ -216,7 +216,7 @@ class EpisodeWriter():
             try:
                 self._save_episode_video()
             except Exception as e:
-                print(f"[EpisodeWriter] [WARN] failed to save episode video: {e}")
+                print(f"[EpisodeWriter] [WARN] Failed to save episode video: {e}")
         self.need_save = False     # Reset the save flag
         self.is_available = True   # Mark the class as available after saving
         print(f"==> Episode (length:{len(self.episode_data)}) saved successfully to {self.json_path}.")

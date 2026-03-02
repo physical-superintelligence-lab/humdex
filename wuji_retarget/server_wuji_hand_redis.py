@@ -830,7 +830,6 @@ class WujiHandRedisController:
                         print(f"[WARN] Loop processing error: {e}")
                         import traceback
                         traceback.print_exc()
-                        # ,
                 else:
                     # Waiting for first valid frame. Hold last_qpos meanwhile.
                     if not self._has_received_data and self._frame_count == 0:

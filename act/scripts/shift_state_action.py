@@ -270,7 +270,7 @@ def batch_process_dataset(
     episodes = find_episode_folders(dataset_dir, episode_pattern)
     
     if verbose:
-        print(f" Dataset: {dataset_dir}")
+        print(f"Dataset: {dataset_dir}")
         print(f"[INFO] Found {len(episodes)} episodes")
         if dry_run:
             print(" Dry run mode - no files will be modified")
@@ -279,7 +279,7 @@ def batch_process_dataset(
         print()
     
     if len(episodes) == 0:
-        print("[WARN]  No episodes found!")
+        print("[WARN] No episodes found!")
         return {"total_episodes": 0}
     
     results = []
@@ -321,9 +321,9 @@ def batch_process_dataset(
         if failed > 0:
             print(f"  [ERROR] Failed: {failed}")
         if too_few > 0:
-            print(f"  [WARN]  Too few frames: {too_few}")
+            print(f"  [WARN] Too few frames: {too_few}")
         if no_data > 0:
-            print(f"  [WARN]  No data.json: {no_data}")
+            print(f"  [WARN] No data.json: {no_data}")
         print()
         print(f"  Original frames: {total_original_frames}")
         print(f"  New frames: {total_new_frames}")

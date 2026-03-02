@@ -166,7 +166,7 @@ def convert_hand_tracking_to_wuji_action(
         return wuji_20d
         
     except Exception as e:
-        print(f"[WARN]  Error converting {hand_side} hand: {e}")
+        print(f"[WARN] Error converting {hand_side} hand: {e}")
         return None
 
 
@@ -196,7 +196,7 @@ def process_json_file(
         raise FileNotFoundError(f"Input file not found: {input_path}")
     
     if verbose:
-        print(f" Loading: {input_path}")
+        print(f"Loading: {input_path}")
     
     # Load JSON
     with open(input_path, "r", encoding="utf-8") as f:
@@ -211,7 +211,7 @@ def process_json_file(
     
     if verbose:
         print(f"[INFO] Total frames: {total_frames}")
-        print(f" Initializing retargeters...")
+        print("Initializing retargeters...")
     
     # Initialize retargeters (once for all frames)
     left_retargeter = WujiHandRetargeter(hand_side="left")
@@ -256,7 +256,7 @@ def process_json_file(
     
     # Save output
     if verbose:
-        print(f" Saving to: {output_path}")
+        print(f"Saving to: {output_path}")
     
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)

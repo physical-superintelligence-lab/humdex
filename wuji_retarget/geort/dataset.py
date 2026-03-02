@@ -109,15 +109,15 @@ class RobotKinematicsDataset:
                 f"but fingertips_rel_wrist has {self.keypoints_array.shape[0]} frames"
             )
 
-        # :npz  fingertip_names: [F]
+        # Load fingertip_names from npz if present
         if "fingertip_names" in npz.files:
             self.fingertip_names = [str(x) for x in npz["fingertip_names"].tolist()]
         else:
-            # ,
+            # Fallback: generate default names
             F = self.keypoints_array.shape[1]
             self.fingertip_names = [f"finger_{i}" for i in range(F)]
 
-        #  name -> index 
+        # name -> index mapping
         self.name_to_index = {name: i for i, name in enumerate(self.fingertip_names)}
 
         return

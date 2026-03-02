@@ -45,7 +45,7 @@ class VirdynMocap:
             else:
                 self.idx = self.T - 1
 
-        # 
+        # Rate limit
         if self.sleep_dt is not None and self.sleep_dt > 0:
             time.sleep(self.sleep_dt)
 
@@ -54,9 +54,9 @@ class VirdynMocap:
 
 class WujiHand:
     """
-    Wuji (sim ):
-    -  GeoRT  HandKinematicModel  wuji_right  urdf
-    - command(qpos)  PD drive target
+    Wuji hand (simulation).
+    - Uses GeoRT HandKinematicModel with wuji_right URDF.
+    - command(qpos) drives PD target.
     """
     def __init__(self, hand_name: str = "wuji_right", render: bool = True):
         config = get_config(hand_name)

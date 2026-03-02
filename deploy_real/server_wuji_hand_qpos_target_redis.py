@@ -35,8 +35,8 @@ def now_ms() -> int:
 try:
     import wujihandpy
 except ImportError:
-    print("[ERROR] Error: wujihandpy is not installed. Please install it first:")
-    print("   pip install wujihandpy")
+    print("[ERROR] Missing dependency: wujihandpy.")
+    print("        Install with: pip install wujihandpy")
     sys.exit(1)
 
 
@@ -75,7 +75,7 @@ class WujiHandDirectQposRedisController:
         self.serial_number = (serial_number or "").strip()
 
         # Redis connection
-        print(f"[INFO] Connecting Redis: {redis_ip}")
+        print(f"[INFO] Connecting to Redis: {redis_ip}")
         self.redis_client = redis.Redis(host=redis_ip, port=6379, decode_responses=False)
         self.redis_client.ping()
         print("[OK] Redis connected")

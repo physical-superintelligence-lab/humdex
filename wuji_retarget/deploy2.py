@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-Wuji Hand Controller via Redis (Policy Inference)
+Wuji hand controller via Redis (policy inference mode).
 
- Redis  teleop.sh (26),21 MediaPipe ,
-, retarget policy model  inference,
- Wuji 5x4=20 ,.
+Reads 26D hand keypoints from Redis (published by teleop), converts to 21D MediaPipe,
+runs policy model inference (GeoRT), and sends 5x4=20 joint targets to the Wuji hand.
 
-- :Redis ,follow/hold/default ,,(OpenCV/Open3D)
--  WujiHandRetargeter.retarget(...)  policy.forward(...)
--  5 (Thumb/Index/Middle/Ring/Pinky tip) policy ((5,3))
-- : + (rate limit),
+- Supports Redis modes: follow / hold / default; optional OpenCV/Open3D visualization.
+- Uses policy.forward(...) instead of WujiHandRetargeter.retarget(...).
+- Policy input: 5 fingertips (Thumb/Index/Middle/Ring/Pinky tip) as (5,3).
+- Safety: clamp + per-step rate limit.
 """
 
 import argparse
@@ -55,11 +54,11 @@ except Exception as e:
 try:
     import wujihandpy
 except ImportError:
-    print("[ERROR] :  wujihandpy,:")
-    print("   pip install wujihandpy")
+    print("[ERROR] Missing dependency: wujihandpy.")
+    print("        Install with: pip install wujihandpy")
     sys.exit(1)
 
-#  wuji_retargeting ( mediapipe )
+# Keep wuji_retargeting importable (for mediapipe transforms).
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WUJI_RETARGETING_PATH = PROJECT_ROOT / "wuji_retargeting"
 if str(WUJI_RETARGETING_PATH) not in sys.path:
@@ -68,8 +67,8 @@ if str(WUJI_RETARGETING_PATH) not in sys.path:
 try:
     from wuji_retargeting.mediapipe import apply_mediapipe_transformations
 except ImportError as e:
-    print(f"[ERROR] :  wuji_retargeting.mediapipe: {e}")
-    print("    wuji_retargeting ( mediapipe  transformations)")
+    print(f"[ERROR] Failed to import wuji_retargeting.mediapipe: {e}")
+    print("        Install wuji_retargeting (provides mediapipe transformations).")
     sys.exit(1)
 
 # ------------------------------
@@ -99,10 +98,7 @@ HAND_JOINT_NAMES_26 = [
 ]
 
 # ------------------------------
-# 26D -> 21D mapping
-# :(0 index=1, Palm)
-#  wrist  Wrist(index=0), 0
-# .
+# 26D -> 21D mapping (index 0 uses Palm; wrist at index 0 in output)
 # ------------------------------
 MEDIAPIPE_MAPPING_26_TO_21 = [
     1,   # 0: Wrist -> Wrist  (NOTE: your code uses Palm as wrist)
@@ -270,18 +266,18 @@ class _Hand21DViz3D:
     def init(self) -> bool:
         if not _O3D_AVAILABLE or o3d is None:
             if _O3D_IMPORT_ERROR:
-                print(f"[WARN]  Open3D : {_O3D_IMPORT_ERROR}")
+                print(f"[WARN] Open3D import failed: {_O3D_IMPORT_ERROR}")
             return False
         try:
             has_display = bool(os.environ.get("DISPLAY")) or bool(os.environ.get("WAYLAND_DISPLAY"))
             if not has_display:
-                print("[WARN]  Open3D 3D : DISPLAY/WAYLAND_DISPLAY, SSH  X .")
+                print("[WARN] Open3D 3D viewer disabled: DISPLAY/WAYLAND_DISPLAY is not set.")
                 return False
 
             vis = o3d.visualization.Visualizer()
             ok = bool(vis.create_window(window_name=self.win_name, width=900, height=700, visible=True))
             if not ok:
-                print("[WARN]  Open3D 3D :create_window() (/GL ).")
+                print("[WARN] Open3D create_window() failed (likely GL/GUI environment issue).")
                 return False
 
             self._vis = vis
@@ -298,7 +294,7 @@ class _Hand21DViz3D:
             self._inited = True
             return True
         except Exception:
-            print("[WARN]  Open3D 3D :( GL/GUI ).")
+            print("[WARN] Open3D 3D viewer initialization failed (GL/GUI issue).")
             return False
 
     def close(self):
@@ -373,7 +369,7 @@ def hand_26d_to_mediapipe_21d(hand_data_dict, hand_side="left", print_distances=
 
     if print_distances:
         fingertip_indices = {"Thumb": 4, "Index": 8, "Middle": 12, "Ring": 16, "Pinky": 20}
-        print("\n[INFO]  (: ):")
+        print("\n[INFO] Wrist-to-fingertip distances:")
         for finger_name, tip_idx in fingertip_indices.items():
             tip_pos = mediapipe_21d[tip_idx]
             distance = np.linalg.norm(tip_pos - mediapipe_21d[0])
@@ -450,11 +446,11 @@ class WujiHandRedisController:
         self.clamp_max = float(clamp_max)
         self.max_delta_per_step = float(max_delta_per_step)
 
-        # connect redis
-        print(f"[INFO]  Redis: {redis_ip}")
+        # Redis connection
+        print(f"[INFO] Connecting to Redis: {redis_ip}")
         self.redis_client = redis.Redis(host=redis_ip, port=6379, decode_responses=False)
         self.redis_client.ping()
-        print("[OK] Redis ")
+        print("[OK] Redis connection established.")
 
         self.robot_key = "unitree_g1_with_hands"
         self.redis_key_hand_tracking = f"hand_tracking_{self.hand_side}_{self.robot_key}"
@@ -464,10 +460,10 @@ class WujiHandRedisController:
         self.redis_key_t_state_wuji_hand = f"t_state_wuji_hand_{self.hand_side}_{self.robot_key}"
         self.redis_key_wuji_mode = f"wuji_hand_mode_{self.hand_side}_{self.robot_key}"
 
-        # init hardware
-        print(f"[INFO]  Wuji {self.hand_side} ...")
+        # Initialize Wuji hand hardware
+        print(f"[INFO] Initializing Wuji hand ({self.hand_side})...")
         if self.serial_number:
-            print(f"[INFO]  serial_number : {self.serial_number}")
+            print(f"[INFO] Using serial_number={self.serial_number}")
             self.hand = wujihandpy.Hand(serial_number=self.serial_number)
         else:
             self.hand = wujihandpy.Hand()
@@ -481,10 +477,10 @@ class WujiHandRedisController:
 
         actual_pose = self.hand.read_joint_actual_position()
         self.zero_pose = np.zeros_like(actual_pose, dtype=np.float32)
-        print(f"[OK] Wuji {self.hand_side} ")
+        print(f"[OK] Wuji hand ({self.hand_side}) is ready.")
 
-        # init policy
-        print("[INFO]  Retarget Policy Model...")
+        # Load policy model
+        print("[INFO] Loading policy model...")
         self.policy = geort.load_model(self.policy_tag, epoch=self.policy_epoch)
         try:
             self.policy.eval()
@@ -549,7 +545,7 @@ class WujiHandRedisController:
             data = self.redis_client.get(self.redis_key_hand_tracking)
             if data is None:
                 if not hasattr(self, "_debug_key_printed"):
-                    print(f"[WARN]  Redis key '{self.redis_key_hand_tracking}' ")
+                    print(f"[WARN] Redis key '{self.redis_key_hand_tracking}' not found yet.")
                     self._debug_key_printed = True
                 return None, None
 
@@ -558,7 +554,7 @@ class WujiHandRedisController:
 
             hand_data = json.loads(data)
             if not isinstance(hand_data, dict):
-                print(f"[WARN]  :  dict, {type(hand_data)}")
+                print(f"[WARN] Invalid payload type: expected dict, got {type(hand_data)}.")
                 return None, None
 
             data_timestamp = hand_data.get("timestamp", 0)
@@ -566,36 +562,36 @@ class WujiHandRedisController:
             time_diff_ms = current_time_ms - data_timestamp
             if time_diff_ms > 500:
                 if not hasattr(self, "_debug_stale_printed"):
-                    print(f"[WARN]   (: {time_diff_ms}ms > 500ms)")
+                    print(f"[WARN] Stale hand_tracking data ({time_diff_ms}ms > 500ms).")
                     self._debug_stale_printed = True
                 return None, None
 
             is_active = hand_data.get("is_active", False)
             if not is_active:
                 if not hasattr(self, "_debug_inactive_printed"):
-                    print("[WARN]   is_active=False")
+                    print("[WARN] Hand source is inactive (is_active=False).")
                     self._debug_inactive_printed = True
                 return None, None
 
             hand_dict = {k: v for k, v in hand_data.items() if k not in ["is_active", "timestamp"]}
             if not hasattr(self, "_debug_success_printed"):
-                print(f"[OK]  Redis  (key: {self.redis_key_hand_tracking}, : {len(hand_dict)})")
+                print(f"[OK] Received hand_tracking data from Redis (key={self.redis_key_hand_tracking}, fields={len(hand_dict)}).")
                 self._debug_success_printed = True
 
             return is_active, hand_dict
 
         except json.JSONDecodeError as e:
-            print(f"[WARN]  JSON : {e}")
+            print(f"[WARN] Failed to decode hand_tracking JSON: {e}")
             return None, None
         except Exception as e:
-            print(f"[WARN]   Redis : {e}")
+            print(f"[WARN] Redis read error: {e}")
             import traceback
             traceback.print_exc()
             return None, None
 
     def run(self):
-        print(f"\n[INFO]  (: {self.target_fps} Hz)")
-        print(" Ctrl+C \n")
+        print(f"\n[INFO] Starting control loop (target: {self.target_fps} Hz)")
+        print("       Press Ctrl+C to stop.\n")
 
         self._fps_start_time = None
         self._fps_data_frame_count = 0
@@ -650,7 +646,7 @@ class WujiHandRedisController:
                             pass
 
                     except Exception as e:
-                        print(f"[WARN]   {mode} : {e}")
+                        print(f"[WARN] Failed in mode '{mode}': {e}")
 
                     elapsed = time.time() - loop_start
                     sleep_time = max(0, self.control_dt - elapsed)
@@ -676,10 +672,10 @@ class WujiHandRedisController:
                             if self._viz3d_ok is None:
                                 self._viz3d_ok = bool(ok3d)
                                 if not self._viz3d_ok:
-                                    print("[WARN]  21D 3D ,.")
+                                    print("[WARN] Failed to open 21D 3D viewer (Open3D GUI unavailable).")
                                     self.viz_hand21d_3d = False
                             elif not ok3d:
-                                print("[STOP]  21D 3D ()..")
+                                print("[STOP] 21D 3D viewer closed by user.")
                                 self.viz_hand21d_3d = False
 
                         if self.viz_hand21d:
@@ -696,10 +692,10 @@ class WujiHandRedisController:
                             if self._viz_ok is None:
                                 self._viz_ok = bool(ok)
                                 if not self._viz_ok:
-                                    print("[WARN]  21D ,.")
+                                    print("[WARN] Failed to open 21D 2D viewer (OpenCV GUI unavailable).")
                                     self.viz_hand21d = False
                             elif not ok:
-                                print("[STOP]  21D (q/ESC )..")
+                                print("[STOP] 21D 2D viewer closed by user (q/ESC).")
                                 self.viz_hand21d = False
 
                         # 3) apply mediapipe transformations (keep same as your pipeline)
@@ -742,17 +738,17 @@ class WujiHandRedisController:
                         if self._fps_data_frame_count >= self._fps_print_interval:
                             elapsed_time = time.time() - self._fps_start_time
                             actual_fps = self._fps_data_frame_count / max(elapsed_time, 1e-6)
-                            print(f"[INFO] : {actual_fps:.2f} Hz (: {self.target_fps} Hz,  {self._fps_data_frame_count} )")
+                            print(f"[INFO] Actual control FPS: {actual_fps:.2f} Hz (target: {self.target_fps} Hz, samples: {self._fps_data_frame_count})")
                             self._fps_start_time = time.time()
                             self._fps_data_frame_count = 0
 
                     except Exception as e:
-                        print(f"[WARN]  : {e}")
+                        print(f"[WARN] Loop processing error: {e}")
                         import traceback
                         traceback.print_exc()
                 else:
                     if not self._has_received_data and self._frame_count == 0:
-                        print("[WAIT] ...")
+                        print("[WAIT] Waiting for active hand_tracking data...")
                     self._frame_count += 1
 
                 elapsed = time.time() - loop_start
@@ -768,20 +764,20 @@ class WujiHandRedisController:
             return
         self._cleaned_up = True
 
-        print("\n[STOP] ...")
+        print("\n[STOP] Cleaning up...")
         try:
             if self._stop_requested_by_signal == signal.SIGTERM:
                 smooth_move(self.hand, self.controller, self.zero_pose, duration=0.2, steps=10)
             else:
                 smooth_move(self.hand, self.controller, self.zero_pose, duration=1.0, steps=50)
-            print("[OK] ")
+            print("[OK] Returned hand to zero pose.")
         except Exception:
             pass
 
         try:
             self.controller.close()
             self.hand.write_joint_enabled(False)
-            print("[OK] ")
+            print("[OK] Controller closed and motors disabled.")
         except Exception:
             pass
 
@@ -796,7 +792,7 @@ class WujiHandRedisController:
         except Exception:
             pass
 
-        print("[OK] ")
+        print("[OK] Cleanup complete.")
 
 
 def parse_arguments():
@@ -842,12 +838,12 @@ def main():
     print("=" * 60)
     print("Wuji Hand Controller via Redis (Policy Inference)")
     print("=" * 60)
-    print(f": {args.hand_side}")
+    print(f"Hand side: {args.hand_side}")
     print(f"Redis IP: {args.redis_ip}")
-    print(f": {args.target_fps} Hz")
-    print(f": {'' if args.no_smooth else ''}")
+    print(f"Target FPS: {args.target_fps} Hz")
+    print(f"Smoothing: {'off' if args.no_smooth else 'on'}")
     if not args.no_smooth:
-        print(f": {args.smooth_steps}")
+        print(f"Smooth steps: {args.smooth_steps}")
     print(f"Policy: tag={args.policy_tag}, epoch={args.policy_epoch}")
     print(f"Safety: clamp=[{args.clamp_min},{args.clamp_max}], max_delta={args.max_delta_per_step}")
     print("=" * 60)
