@@ -9,7 +9,6 @@ and sends joint targets to the Wuji hand controller.
 
 import argparse
 import json
-from re import T
 import time
 import numpy as np
 import redis
@@ -17,298 +16,7 @@ import signal
 import sys
 import os
 from pathlib import Path
-from dataclasses import dataclass
-from typing import Optional, Tuple
-from typing import Any
-
-# Optional OpenCV for visualization
-try:
-    import cv2  # type: ignore
-    _CV2_AVAILABLE = True
-except Exception:
-    cv2 = None
-    _CV2_AVAILABLE = False
-
-# Optional Open3D for true 3D visualization
-try:
-    import open3d as o3d  # type: ignore
-    _O3D_AVAILABLE = True
-    _O3D_IMPORT_ERROR = None
-except Exception as e:
-    o3d = None
-    _O3D_AVAILABLE = False
-    _O3D_IMPORT_ERROR = repr(e)
-
-
-# MediaPipe 21 keypoints hand skeleton connections (indices)
-# 0: wrist
-# Thumb: 1-4, Index: 5-8, Middle: 9-12, Ring: 13-16, Pinky: 17-20
-_MP_HAND_CONNECTIONS = [
-    # Thumb
-    (0, 1), (1, 2), (2, 3), (3, 4),
-    # Index
-    (0, 5), (5, 6), (6, 7), (7, 8),
-    # Middle
-    (0, 9), (9, 10), (10, 11), (11, 12),
-    # Ring
-    (0, 13), (13, 14), (14, 15), (15, 16),
-    # Pinky
-    (0, 17), (17, 18), (18, 19), (19, 20),
-    # Palm
-    (5, 9), (9, 13), (13, 17),
-]
-
-
-@dataclass
-class _HandVizView:
-    """View parameters for projecting 21D 3D points into a 2D canvas."""
-    yaw_deg: float = 0.0    # rotation around Z axis
-    pitch_deg: float = 0.0  # rotation around X axis
-    roll_deg: float = 0.0   # rotation around Y axis
-    scale_px_per_m: float = 1200.0
-
-
-def _rot_x(a: float) -> np.ndarray:
-    ca, sa = float(np.cos(a)), float(np.sin(a))
-    return np.array([[1, 0, 0], [0, ca, -sa], [0, sa, ca]], dtype=np.float32)
-
-
-def _rot_y(a: float) -> np.ndarray:
-    ca, sa = float(np.cos(a)), float(np.sin(a))
-    return np.array([[ca, 0, sa], [0, 1, 0], [-sa, 0, ca]], dtype=np.float32)
-
-
-def _rot_z(a: float) -> np.ndarray:
-    ca, sa = float(np.cos(a)), float(np.sin(a))
-    return np.array([[ca, -sa, 0], [sa, ca, 0], [0, 0, 1]], dtype=np.float32)
-
-
-def _viz_draw_mediapipe_hand_21d(
-    pts21: np.ndarray,
-    win_name: str = "hand_21d",
-    canvas_size: int = 640,
-    scale_px_per_m: float = 1200.0,
-    flip_y: bool = True,
-    show_index: bool = False,
-    hand_side: str = "",
-    view: Optional[_HandVizView] = None,
-) -> Tuple[bool, _HandVizView]:
-    """
-    Draw MediaPipe 21D hand points in a simple interactive OpenCV window.
-
-    - Wrist (0) and fingertips (4/8/12/16/20) are highlighted.
-    - Keyboard controls support rotate/zoom/reset/quit.
-
-    Returns:
-        (ok, view)
-        - ok=True: frame drawn successfully
-        - ok=False: visualization unavailable or user requested quit
-    """
-    if view is None:
-        view = _HandVizView(scale_px_per_m=float(scale_px_per_m))
-    if not _CV2_AVAILABLE or cv2 is None:
-        return False, view
-    if pts21 is None:
-        return False, view
-    pts21 = np.asarray(pts21, dtype=np.float32).reshape(21, 3)
-
-    H = int(canvas_size)
-    W = int(canvas_size)
-    img = np.zeros((H, W, 3), dtype=np.uint8)
-
-    cx = W // 2
-    cy = H // 2
-
-    # 3D rotate -> 2D project
-    yaw = float(np.deg2rad(view.yaw_deg))
-    pitch = float(np.deg2rad(view.pitch_deg))
-    roll = float(np.deg2rad(view.roll_deg))
-    R = _rot_z(yaw) @ _rot_x(pitch) @ _rot_y(roll)
-    pts3 = (R @ pts21.T).T  # (21,3)
-    xy = pts3[:, :2].copy()
-    if flip_y:
-        xy[:, 1] *= -1.0
-
-    pts2 = np.zeros((21, 2), dtype=np.int32)
-    s = float(view.scale_px_per_m)
-    pts2[:, 0] = (cx + xy[:, 0] * s).astype(np.int32)
-    pts2[:, 1] = (cy + xy[:, 1] * s).astype(np.int32)
-
-    # Draw connections
-    for a, b in _MP_HAND_CONNECTIONS:
-        pa = tuple(int(x) for x in pts2[a])
-        pb = tuple(int(x) for x in pts2[b])
-        cv2.line(img, pa, pb, (180, 180, 180), 2, lineType=cv2.LINE_AA)
-
-    # Draw points
-    tip_idxs = {4, 8, 12, 16, 20}
-    for i in range(21):
-        p = tuple(int(x) for x in pts2[i])
-        is_red = (i == 0) or (i in tip_idxs)
-        color = (0, 0, 255) if is_red else (0, 255, 0)  # BGR
-        radius = 7 if is_red else 5
-        cv2.circle(img, p, radius, color, -1, lineType=cv2.LINE_AA)
-        if show_index:
-            cv2.putText(img, str(i), (p[0] + 6, p[1] - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
-
-    title = "21D MediaPipe Hand"
-    if hand_side:
-        title += f" ({hand_side})"
-    if win_name:
-        try:
-            cv2.putText(img, title, (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            cv2.putText(
-                img,
-                "rotate: J/L yaw  I/K pitch  U/O roll   zoom: +/-   reset: R   quit: Q/ESC",
-                (10, H - 12),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.45,
-                (200, 200, 200),
-                1,
-            )
-            cv2.imshow(win_name, img)
-            # waitKey(1) for refresh; return False if user presses 'q'/'ESC'
-            k = int(cv2.waitKey(1) & 0xFF)
-            if k in (ord('q'), 27):
-                return False, view
-            # Key controls
-            step_deg = 5.0
-            if k == ord('j'):
-                view.yaw_deg -= step_deg
-            elif k == ord('l'):
-                view.yaw_deg += step_deg
-            elif k == ord('i'):
-                view.pitch_deg -= step_deg
-            elif k == ord('k'):
-                view.pitch_deg += step_deg
-            elif k == ord('u'):
-                view.roll_deg -= step_deg
-            elif k == ord('o'):
-                view.roll_deg += step_deg
-            elif k in (ord('+'), ord('=')):
-                view.scale_px_per_m *= 1.1
-            elif k in (ord('-'), ord('_')):
-                view.scale_px_per_m /= 1.1
-            elif k == ord('r'):
-                view.yaw_deg = 0.0
-                view.pitch_deg = 0.0
-                view.roll_deg = 0.0
-                view.scale_px_per_m = float(scale_px_per_m)
-        except Exception:
-            # likely no DISPLAY / headless
-            return False, view
-    return True, view
-
-
-class _Hand21DViz3D:
-    """
-    Open3D 3D viewer for MediaPipe 21D hand keypoints.
-    - Wrist/fingertips are highlighted.
-    - Window can be closed by user action.
-    """
-
-    def __init__(self, win_name: str = "hand_21d_3d", axis_len_m: float = 0.10):
-        self.win_name = str(win_name)
-        self.axis_len_m = float(axis_len_m)
-        self._vis = None  # type: Optional[Any]
-        self._pcd = None  # type: Optional[Any]
-        self._lines = None  # type: Optional[Any]
-        self._inited = False
-
-    def init(self) -> bool:
-        if not _O3D_AVAILABLE or o3d is None:
-            if _O3D_IMPORT_ERROR:
-                print(f"[WARN] Open3D import failed: {_O3D_IMPORT_ERROR}")
-            return False
-        try:
-            # Detect display availability early (common failure on headless / SSH without X forwarding)
-            has_display = bool(os.environ.get("DISPLAY")) or bool(os.environ.get("WAYLAND_DISPLAY"))
-            if not has_display:
-                print("[WARN] Open3D 3D viewer disabled: DISPLAY/WAYLAND_DISPLAY is not set.")
-                print("       If running over SSH, enable X forwarding (`-X`/`-Y`) or use xvfb.")
-                return False
-
-            vis = o3d.visualization.Visualizer()
-            ok = bool(vis.create_window(window_name=self.win_name, width=900, height=700, visible=True))
-            if not ok:
-                print("[WARN] Open3D create_window() failed (likely GL/GUI environment issue).")
-                print("       Check `echo $DISPLAY` and `glxinfo | head` (mesa-utils).")
-                print("       Ensure OpenGL/X11 runtime libs are installed.")
-                return False
-            self._vis = vis
-
-            self._pcd = o3d.geometry.PointCloud()
-            self._lines = o3d.geometry.LineSet()
-
-            # Add geometry once
-            self._vis.add_geometry(self._pcd)
-            self._vis.add_geometry(self._lines)
-
-            # Optional coordinate frame
-            if self.axis_len_m > 0:
-                axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=self.axis_len_m, origin=[0, 0, 0])
-                self._vis.add_geometry(axis)
-
-            self._inited = True
-            return True
-        except Exception:
-            print("[WARN] Open3D 3D viewer initialization failed (GL/GUI issue).")
-            return False
-
-    def close(self):
-        try:
-            if self._vis is not None:
-                self._vis.destroy_window()
-        except Exception:
-            pass
-        self._vis = None
-        self._pcd = None
-        self._lines = None
-        self._inited = False
-
-    def update(self, pts21: np.ndarray) -> bool:
-        if not self._inited:
-            if not self.init():
-                return False
-        if self._vis is None or self._pcd is None or self._lines is None or o3d is None:
-            return False
-
-        pts21 = np.asarray(pts21, dtype=np.float32).reshape(21, 3)
-
-        try:
-            # Points
-            self._pcd.points = o3d.utility.Vector3dVector(pts21.astype(np.float64))
-            tip_idxs = {0, 4, 8, 12, 16, 20}
-            colors = np.zeros((21, 3), dtype=np.float64)
-            for i in range(21):
-                if i in tip_idxs:
-                    colors[i] = np.array([1.0, 0.0, 0.0], dtype=np.float64)  # red
-                else:
-                    colors[i] = np.array([0.0, 1.0, 0.0], dtype=np.float64)  # green
-            self._pcd.colors = o3d.utility.Vector3dVector(colors)
-
-            # Lines
-            lines = np.asarray(_MP_HAND_CONNECTIONS, dtype=np.int32)
-            self._lines.points = o3d.utility.Vector3dVector(pts21.astype(np.float64))
-            self._lines.lines = o3d.utility.Vector2iVector(lines)
-            self._lines.colors = o3d.utility.Vector3dVector(
-                np.tile(np.array([[0.7, 0.7, 0.7]], dtype=np.float64), (lines.shape[0], 1))
-            )
-
-            self._vis.update_geometry(self._pcd)
-            self._vis.update_geometry(self._lines)
-
-            ok = bool(self._vis.poll_events())
-            self._vis.update_renderer()
-            if not ok:
-                # window closed
-                self.close()
-                return False
-            return True
-        except Exception:
-            # any rendering issue -> disable
-            self.close()
-            return False
+from typing import Optional
 
 def now_ms() -> int:
     """Return current wall-clock time in milliseconds."""
@@ -354,33 +62,9 @@ HAND_JOINT_NAMES_26 = [
     "LittleMetacarpal", "LittleProximal", "LittleIntermediate", "LittleDistal", "LittleTip"
 ]
 
-# 26D -> 21D mapping to MediaPipe layout:
+# 26D -> 21D mapping to MediaPipe layout.
 # MediaPipe: [Wrist, Thumb(4), Index(4), Middle(4), Ring(4), Pinky(4)]
 # 26D input: [Wrist, Palm, Thumb(4), Index(5), Middle(5), Ring(5), Pinky(5)]
-# MEDIAPIPE_MAPPING_26_TO_21 = [
-#     1,   # 0: Wrist -> Wrist
-#     2,   # 1: ThumbMetacarpal -> Thumb CMC
-#     3,   # 2: ThumbProximal -> Thumb MCP
-#     4,   # 3: ThumbDistal -> Thumb IP
-#     5,   # 4: ThumbTip -> Thumb Tip
-#     6,   # 5: IndexMetacarpal -> Index MCP
-#     7,   # 6: IndexProximal -> Index PIP
-#     8,   # 7: IndexIntermediate -> Index DIP
-#     10,  # 8: IndexTip -> Index Tip ( IndexDistal)
-#     11,  # 9: MiddleMetacarpal -> Middle MCP
-#     12,  # 10: MiddleProximal -> Middle PIP
-#     13,  # 11: MiddleIntermediate -> Middle DIP
-#     15,  # 12: MiddleTip -> Middle Tip ( MiddleDistal)
-#     16,  # 13: RingMetacarpal -> Ring MCP
-#     17,  # 14: RingProximal -> Ring PIP
-#     18,  # 15: RingIntermediate -> Ring DIP
-#     20,  # 16: RingTip -> Ring Tip ( RingDistal)
-#     21,  # 17: LittleMetacarpal -> Pinky MCP
-#     22,  # 18: LittleProximal -> Pinky PIP
-#     23,  # 19: LittleIntermediate -> Pinky DIP
-#     25,  # 20: LittleTip -> Pinky Tip ( LittleDistal)
-# ]
-
 MEDIAPIPE_MAPPING_26_TO_21 = [
     1,   # 0: Wrist -> Wrist
     2,   # 1: ThumbMetacarpal -> Thumb CMC
@@ -405,42 +89,14 @@ MEDIAPIPE_MAPPING_26_TO_21 = [
     25,  # 20: LittleTip -> Pinky Tip ( LittleDistal)
 ]
 
-# # 2621 MediaPipe 
-# # MediaPipe : [Wrist, Thumb(4), Index(4), Middle(4), Ring(4), Pinky(4)]
-# # 26: [Wrist, Palm, Thumb(4), Index(5), Middle(5), Ring(5), Pinky(5)]
-# MEDIAPIPE_MAPPING_26_TO_21 = [
-#     1,   # 0: Wrist -> Wrist
-#     2,   # 1: ThumbMetacarpal -> Thumb CMC
-#     3,   # 2: ThumbProximal -> Thumb MCP
-#     4,   # 3: ThumbDistal -> Thumb IP
-#     5,   # 4: ThumbTip -> Thumb Tip
-#     6,   # 5: IndexMetacarpal -> Index MCP
-#     7,   # 6: IndexProximal -> Index PIP
-#     8,   # 7: IndexIntermediate -> Index DIP
-#     10,  # 8: IndexTip -> Index Tip ( IndexDistal)
-#     11,  # 9: MiddleMetacarpal -> Middle MCP
-#     12,  # 10: MiddleProximal -> Middle PIP
-#     13,  # 11: MiddleIntermediate -> Middle DIP
-#     15,  # 12: MiddleTip -> Middle Tip ( MiddleDistal)
-#     16,  # 13: RingMetacarpal -> Ring MCP
-#     17,  # 14: RingProximal -> Ring PIP
-#     18,  # 15: RingIntermediate -> Ring DIP
-#     20,  # 16: RingTip -> Ring Tip ( RingDistal)
-#     21,  # 17: LittleMetacarpal -> Pinky MCP
-#     22,  # 18: LittleProximal -> Pinky PIP
-#     23,  # 19: LittleIntermediate -> Pinky DIP
-#     25,  # 20: LittleTip -> Pinky Tip ( LittleDistal)
-# ]
 
-
-def hand_26d_to_mediapipe_21d(hand_data_dict, hand_side="left", print_distances=False):
+def hand_26d_to_mediapipe_21d(hand_data_dict, hand_side="left"):
     """
     Convert 26D hand dict data into a (21, 3) MediaPipe-style array.
 
     Args:
         hand_data_dict: 26D dict, e.g. {"LeftHandWrist": [[x,y,z], [qw,qx,qy,qz]], ...}
         hand_side: "left" or "right"
-        print_distances: print wrist-to-fingertip distances for debugging
 
     Returns:
         numpy.ndarray with shape (21, 3)
@@ -470,38 +126,6 @@ def hand_26d_to_mediapipe_21d(hand_data_dict, hand_side="left", print_distances=
     scale_factor = 1.0
     mediapipe_21d[1:] = mediapipe_21d[1:] * scale_factor
 
-    # Optional distance debug report.
-    if print_distances:
-        print("Thumb tip position:", mediapipe_21d[4])
-        print("Index tip position:", mediapipe_21d[8])
-        print("Middle tip position:", mediapipe_21d[12])
-        print("Ring tip position:", mediapipe_21d[16])
-        print("Pinky tip position:", mediapipe_21d[20])
-
-        # MediaPipe fingertip indices.
-        fingertip_indices = {
-            "Thumb": 4,    # ThumbTip
-            "Index": 8,    # IndexTip
-            "Middle": 12,  # MiddleTip
-            "Ring": 16,    # RingTip
-            "Pinky": 20,   # PinkyTip
-        }
-        
-        print("\n[INFO] Wrist-to-fingertip distances:")
-        print("-" * 50)
-        wrist_pos_scaled = mediapipe_21d[0]  # expected [0, 0, 0]
-        for finger_name, tip_idx in fingertip_indices.items():
-            tip_pos = mediapipe_21d[tip_idx]
-            distance = np.linalg.norm(tip_pos - wrist_pos_scaled)
-            print(f"  {finger_name:6s} (idx {tip_idx:2d}): {distance*100:6.2f} cm ({distance:.4f} m)")
-        print("-" * 50)
-
-        # print(mediapipe_21d)
-        # print("-" * 50)
-        # print("-" * 50)
-        # print(joint_positions_26)
-        # print("-" * 50)
-    
     return mediapipe_21d
 
 
@@ -549,17 +173,8 @@ class WujiHandRedisController:
         clamp_min: float = -1.5,
         clamp_max: float = 1.5,
         max_delta_per_step: float = 0.08,
-        viz_hand21d: bool = False,
-        viz_hand21d_size: int = 640,
-        viz_hand21d_scale: float = 1200.0,
-        viz_hand21d_show_index: bool = False,
-        viz_hand21d_3d: bool = False,
-        viz_hand21d_3d_axis_len_m: float = 0.10,
-        debug_pinch: bool = False,
-        debug_pinch_every: int = 50,
         pinch_project_ratio: float = 0.2,
         pinch_escape_ratio: float = 0.3,
-        pinch_project_dist_max: float = 0.12,
         disable_dexpilot_projection: bool = False,
         config_path: Optional[str] = None,
     ):
@@ -589,26 +204,8 @@ class WujiHandRedisController:
         self.clamp_max = float(clamp_max)
         self.max_delta_per_step = float(max_delta_per_step)
 
-        # 2D 21D visualization (OpenCV)
-        self.viz_hand21d = bool(viz_hand21d)
-        self.viz_hand21d_size = int(viz_hand21d_size)
-        self.viz_hand21d_scale = float(viz_hand21d_scale)
-        self.viz_hand21d_show_index = bool(viz_hand21d_show_index)
-        self._viz_ok = None  # None=unknown, True/False known after first draw
-        self._viz_view = _HandVizView(scale_px_per_m=self.viz_hand21d_scale)
-
-        # 3D 21D visualization (Open3D)
-        self.viz_hand21d_3d = bool(viz_hand21d_3d)
-        self.viz_hand21d_3d_axis_len_m = float(viz_hand21d_3d_axis_len_m)
-        self._viz3d_ok = None
-        self._viz3d = _Hand21DViz3D(win_name=f"hand_21d_3d_{self.hand_side}", axis_len_m=self.viz_hand21d_3d_axis_len_m)
-
-        # Debug pinch (thumb-index distance + current projection threshold)
-        self.debug_pinch = bool(debug_pinch)
-        self.debug_pinch_every = max(1, int(debug_pinch_every))
         self.pinch_project_ratio = float(pinch_project_ratio)
         self.pinch_escape_ratio = float(pinch_escape_ratio)
-        self.pinch_project_dist_max = float(pinch_project_dist_max)
         self.disable_dexpilot_projection = bool(disable_dexpilot_projection)
         self.config_path = config_path
         
@@ -734,7 +331,6 @@ class WujiHandRedisController:
         self._cleaned_up = False
         self._stop_requested_by_signal = None
         self._frame_count = 0
-        self._distance_printed = False
         self._has_received_data = False
         
         # FPS stats for valid data frames
@@ -856,12 +452,6 @@ class WujiHandRedisController:
         signal.signal(signal.SIGINT, _handle_signal)
         signal.signal(signal.SIGTERM, _handle_signal)
 
-        # 1230 debug -- Yihe
-        from rich.live import Live
-        from rich.text import Text
-        live = Live(refresh_per_second=10, auto_refresh=True)
-        live.start()
-
         try:
             while self.running:
                 loop_start = time.time()
@@ -875,14 +465,6 @@ class WujiHandRedisController:
                 except Exception:
                     mode = "follow"
                 mode = mode.strip().lower()
-
-                # # 1230 debug -- Yihe
-                # # actual_qpos = self.hand.get_joint_actual_position()
-                # # print(f"actual_qpos: {actual_qpos}")
-                # actual_qpos = self.hand.read_joint_actual_position()
-                # # print(f"actual_qpos: {actual_qpos}")
-                # with np.printoptions(precision=4, suppress=True):
-                #     live.update(Text(f"actual_qpos: {actual_qpos}"))
 
                 # 0.1) default => zero_pose, hold => last_qpos (freeze tracking).
                 if mode in ["default", "hold"]:
@@ -935,47 +517,8 @@ class WujiHandRedisController:
                             self._fps_data_frame_count = 0
                         
                         # 1. Convert 26D dict to 21D MediaPipe keypoints.
-                        print_distances = False
-                        mediapipe_21d = hand_26d_to_mediapipe_21d(hand_data_dict, self.hand_side, 
-                                                                  print_distances=print_distances)
-                        # 1.4 Optional 3D viewer (Open3D).
-                        if self.viz_hand21d_3d:
-                            ok3d = self._viz3d.update(mediapipe_21d)
-                            if self._viz3d_ok is None:
-                                self._viz3d_ok = bool(ok3d)
-                                if not self._viz3d_ok:
-                                    print("[WARN] Failed to open 21D 3D viewer (Open3D GUI unavailable).")
-                                    self.viz_hand21d_3d = False
-                            elif not ok3d:
-                                print("[STOP] 21D 3D viewer closed by user.")
-                                self.viz_hand21d_3d = False
-                        # 1.5 Optional 2D viewer (OpenCV).
-                        if self.viz_hand21d:
-                            ok, self._viz_view = _viz_draw_mediapipe_hand_21d(
-                                mediapipe_21d,
-                                win_name=f"hand_21d_{self.hand_side}",
-                                canvas_size=self.viz_hand21d_size,
-                                scale_px_per_m=self.viz_hand21d_scale,
-                                flip_y=True,
-                                show_index=self.viz_hand21d_show_index,
-                                hand_side=self.hand_side,
-                                view=self._viz_view,
-                            )
-                            # Detect the first visualization result once, then keep state.
-                            if self._viz_ok is None:
-                                self._viz_ok = bool(ok)
-                                if not self._viz_ok:
-                                    print("[WARN] Failed to open 21D 2D viewer (OpenCV GUI unavailable).")
-                                    self.viz_hand21d = False
-                            elif not ok:
-                                # User pressed q/ESC.
-                                print("[STOP] 21D 2D viewer closed by user (q/ESC).")
-                                self.viz_hand21d = False
-                        if print_distances:
-                            self._distance_printed = True
-                            print("\n[OK] Distance report printed; exiting as requested.")
-                            break
-                        
+                        mediapipe_21d = hand_26d_to_mediapipe_21d(hand_data_dict, self.hand_side)
+
                         # 2. Apply MediaPipe coordinate transforms.
                         mediapipe_transformed = apply_mediapipe_transformations(
                             mediapipe_21d, 
@@ -994,75 +537,6 @@ class WujiHandRedisController:
                                 wuji_20d = qpos20_wuji.reshape(5, 4)
                             else:
                                 wuji_20d = qpos20.reshape(5, 4)
-
-                        # Debug pinch( DexPilot )
-                        if (not self.use_model) and self.debug_pinch and (self._frame_count % self.debug_pinch_every == 0):
-                            # 0) raw 26D from Redis dict (if present)
-                            hand_side_prefix = "LeftHand" if self.hand_side == "left" else "RightHand"
-                            k_thumb = hand_side_prefix + "ThumbTip"
-                            k_index = hand_side_prefix + "IndexTip"
-                            raw_thumb = hand_data_dict.get(k_thumb, None)
-                            raw_index = hand_data_dict.get(k_index, None)
-                            raw_has = (raw_thumb is not None) and (raw_index is not None)
-                            if raw_has:
-                                try:
-                                    raw26_thumb = np.array(raw_thumb[0], dtype=np.float32)
-                                    raw26_index = np.array(raw_index[0], dtype=np.float32)
-                                    raw26_dist = float(np.linalg.norm(raw26_thumb - raw26_index))
-                                except Exception:
-                                    raw26_thumb = None
-                                    raw26_index = None
-                                    raw26_dist = float("nan")
-                            else:
-                                raw26_thumb = None
-                                raw26_index = None
-                                raw26_dist = float("nan")
-
-                            # 1) after 26D->21D mapping (before apply_mediapipe_transformations)
-                            try:
-                                mp21_dist = float(np.linalg.norm(mediapipe_21d[4] - mediapipe_21d[8]))
-                            except Exception:
-                                mp21_dist = float("nan")
-
-                            # 2) after apply_mediapipe_transformations (actual retarget input)
-                            try:
-                                thumb_index_dist = float(np.linalg.norm(mediapipe_transformed[4] - mediapipe_transformed[8]))
-                            except Exception:
-                                thumb_index_dist = float("nan")
-                            msg = f"[pinch] frame={self._frame_count}"
-                            if raw_has:
-                                msg += f"  raw26={raw26_dist:.4f}m({raw26_dist*100:.1f}cm)"
-                            else:
-                                msg += f"  raw26=NA(missing {k_thumb} or {k_index})"
-                            msg += f"  mp21={mp21_dist:.4f}m({mp21_dist*100:.1f}cm)"
-                            msg += f"  xform={thumb_index_dist:.4f}m({thumb_index_dist*100:.1f}cm)"
-
-                            # 3) robot FK fingertip distance (did the solver actually pinch on the robot model?)
-                            try:
-                                opt2 = getattr(self.retargeter, "optimizer", None)
-                                if opt2 is not None and hasattr(opt2, "robot"):
-                                    robot = opt2.robot
-                                    qpos20_fk = qpos20.astype(np.float64).reshape(-1)
-                                    robot.compute_forward_kinematics(qpos20_fk)
-                                    tip1 = robot.get_link_pose(robot.get_link_index("finger1_tip_link"))[:3, 3]
-                                    tip2 = robot.get_link_pose(robot.get_link_index("finger2_tip_link"))[:3, 3]
-                                    robot_tip_dist = float(np.linalg.norm(tip1 - tip2))
-                                    msg += f"  robot_tip12={robot_tip_dist:.4f}m({robot_tip_dist*100:.1f}cm)"
-                            except Exception:
-                                pass
-                            try:
-                                opt = getattr(self.retargeter, "optimizer", None)
-                                if opt is not None:
-                                    proj = getattr(opt, "last_project_dist", None)
-                                    esc = getattr(opt, "last_escape_dist", None)
-                                    if proj is not None and esc is not None:
-                                        msg += f"  proj={float(proj):.4f}m esc={float(esc):.4f}m"
-                                    if (not self.disable_dexpilot_projection) and hasattr(opt, "projected") and isinstance(opt.projected, np.ndarray) and opt.projected.size > 0:
-                                        # projected[0] corresponds to thumb-index in this DexPilot setup
-                                        msg += f"  projected_thumb_index={bool(opt.projected[0])}"
-                            except Exception:
-                                pass
-                            print(msg, flush=True)
 
                         # 3.5 Publish Wuji action target to Redis.
                         try:
@@ -1146,18 +620,6 @@ class WujiHandRedisController:
         except:
             pass
 
-        # close viz windows (optional)
-        try:
-            if self._viz3d is not None:
-                self._viz3d.close()
-        except Exception:
-            pass
-        try:
-            if _CV2_AVAILABLE and cv2 is not None:
-                cv2.destroyAllWindows()
-        except Exception:
-            pass
-        
         print("[OK] Cleanup complete.")
 
 
@@ -1260,56 +722,6 @@ Examples:
     parser.add_argument("--clamp_max", type=float, default=1.5, help="Maximum clamp value for model output (--use_model)")
     parser.add_argument("--max_delta_per_step", type=float, default=0.08, help="Maximum per-step delta for model output (--use_model)")
 
-    # 2D 21D visualization (OpenCV)
-    parser.add_argument(
-        "--viz_hand21d",
-        action="store_true",
-        help="Show 2D MediaPipe 21D visualization (OpenCV). Requires opencv-python",
-    )
-    parser.add_argument(
-        "--viz_hand21d_size",
-        type=int,
-        default=640,
-        help="2D visualization canvas size in pixels (default: 640)",
-    )
-    parser.add_argument(
-        "--viz_hand21d_scale",
-        type=float,
-        default=1200.0,
-        help="2D visualization scale in px/m (default: 1200)",
-    )
-    parser.add_argument(
-        "--viz_hand21d_show_index",
-        action="store_true",
-        help="Show keypoint indices (0-20) in 2D visualization",
-    )
-
-    # 3D 21D visualization (Open3D)
-    parser.add_argument(
-        "--viz_hand21d_3d",
-        action="store_true",
-        help="Show 3D MediaPipe 21D visualization (Open3D). Requires open3d",
-    )
-    parser.add_argument(
-        "--viz_hand21d_3d_axis_len_m",
-        type=float,
-        default=0.10,
-        help="Coordinate frame axis length for 3D viewer in meters (default: 0.10; set 0 to disable)",
-    )
-
-    # Debug pinch: thumb-index distance and projection threshold
-    parser.add_argument(
-        "--debug_pinch",
-        action="store_true",
-        help="Print thumb-index pinch diagnostics",
-    )
-    parser.add_argument(
-        "--debug_pinch_every",
-        type=int,
-        default=50,
-        help="Print pinch diagnostics every N frames (default: 50; ~1s at 50Hz)",
-    )
-
     # Pinch tuning (DexPilot projection thresholds)
     parser.add_argument(
         "--pinch_project_ratio",
@@ -1322,12 +734,6 @@ Examples:
         type=float,
         default=0.03,
         help="DexPilot pinch escape_dist threshold (meters, default: 0.03)",
-    )
-    parser.add_argument(
-        "--pinch_project_dist_max",
-        type=float,
-        default=0.12,
-        help="Deprecated legacy arg kept for compatibility (unused by current retarget path)",
     )
     parser.add_argument(
         "--disable_dexpilot_projection",
@@ -1394,17 +800,8 @@ def main():
             clamp_min=args.clamp_min,
             clamp_max=args.clamp_max,
             max_delta_per_step=args.max_delta_per_step,
-            viz_hand21d=args.viz_hand21d,
-            viz_hand21d_size=args.viz_hand21d_size,
-            viz_hand21d_scale=args.viz_hand21d_scale,
-            viz_hand21d_show_index=args.viz_hand21d_show_index,
-            viz_hand21d_3d=args.viz_hand21d_3d,
-            viz_hand21d_3d_axis_len_m=args.viz_hand21d_3d_axis_len_m,
-            debug_pinch=args.debug_pinch,
-            debug_pinch_every=args.debug_pinch_every,
             pinch_project_ratio=args.pinch_project_ratio,
             pinch_escape_ratio=args.pinch_escape_ratio,
-            pinch_project_dist_max=args.pinch_project_dist_max,
             disable_dexpilot_projection=args.disable_dexpilot_projection,
             config_path=selected_config,
         )
