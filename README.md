@@ -166,20 +166,20 @@ bash deploy.sh real --input-type zmq
 
 ## Wuji Hand Controller
 
-### 1) Real Hand Controller
+### 1) Sim Hand Controller
 
 ```bash
 conda activate humdex
 
-bash wuji_hand_redis_single.sh
+bash wuji_hand_sim.sh
 ```
 
-### 2) Sim Hand Controller
+### 2) Real Hand Controller
 
 ```bash
 conda activate humdex
 
-bash wuji_hand_redis_single_sim.sh
+bash wuji_hand_real.sh
 ```
 
 ---
