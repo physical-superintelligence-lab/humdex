@@ -2,8 +2,6 @@
 By Liang Heng, Yihe Tang, Jiajun Xu, Henghui Bao, Di Huang, Yue Wang
 
 
----
-
 ## Content Table
 
 - [Installation](#installation)
