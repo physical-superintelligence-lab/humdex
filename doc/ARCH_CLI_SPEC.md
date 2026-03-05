@@ -51,7 +51,6 @@ Source-specific optional args:
   - `--vmc_use_viewer_fk`
   - `--vmc_bvh_path`
   - `--vmc_bvh_scale`
-  - `--vmc_viewer_bone_axis_override`
 - Manus:
   - `--manus_address`
   - `--manus_left_sn`

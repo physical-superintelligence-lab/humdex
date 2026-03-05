@@ -14,17 +14,9 @@ python server_wuji_hand_sim_redis.py \
     --config ${retarget_config} \
     --redis_ip ${redis_ip} \
     --target_fps ${target_fps} \
-    --freshness_ms 500 \
-    # --disable_dexpilot_projection \
-    # --print_distances_and_exit \
-    # --mjcf_path /abs/path/to/left.xml \
-    # --verbose \
-    # --no_write_action_target \
+    --no_smooth \
     # --use_model \
     # --policy_tag geort_filter_wuji \
     # --policy_epoch -1 \
-    # --clamp_min -1.5 \
-    # --clamp_max 1.5 \
-    # --max_delta_per_step 0.08 \
 
 

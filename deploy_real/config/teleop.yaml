@@ -1,92 +1,79 @@
 runtime:
-  target_fps: 50.0
-  measure_fps: 1
-  print_every: 120
-  max_steps: 100000000000
-  dry_run: false
+  target_fps: 50.0                                               # Target loop frequency
+  print_every: 120                                               # Print status every N steps
+  max_steps: 100000000000                                        # Max loop iterations before exit
 
 network:
   redis:
-    ip: "localhost"
+    ip: "localhost"                                              # Redis host for teleop publish/consume
   mocap:
     default:
-      ip: "192.168.1.111"
-      port: 7000
-      index: 0
-      world_space: 0
-      local_port: 0
+      ip: "192.168.1.111"                                        # Fallback mocap sender IP
+      port: 7000                                                 # Fallback mocap sender UDP port
+      index: 0                                                   # Fallback SDK stream index
+      world_space: 0                                             # VDMocap world-space flag
+      local_port: 0                                              # Local UDP port for SDK open
     body:
-      ip: "192.168.1.111"
-      port: 7000
-      index: 0
+      ip: "192.168.1.111"                                        # Body mocap sender IP
+      port: 7000                                                 # Body mocap sender UDP port
+      index: 0                                                   # Body SDK stream index
     hand:
-      ip: "192.168.1.111"
-      port: 7000
-      index: 1
+      ip: "192.168.1.111"                                        # Hand mocap sender IP
+      port: 7000                                                 # Hand mocap sender UDP port
+      index: 1                                                   # Hand SDK stream index
 
 retarget:
-  actual_human_height: 1.45
-  hands: "both"
-  format: "nokov"
-  offset_to_ground: true
-  safe_idle_pose_id: "2"
-  ramp_ease: "cosine"
-  start_ramp_seconds: 3.0
-  toggle_ramp_seconds: 3.0
-  exit_ramp_seconds: 3.0
-  smooth: false
-  smooth_window_size: 5
-  control_neck: false
-  neck_retarget_scale: 1.5
+  actual_human_height: 1.45                                      # Human height used for GMR retarget scaling
+  hands: "both"                                                  # Active hands: left/right/both/none
+  format: "nokov"                                                # Source skeleton format for GMR
+  offset_to_ground: true                                         # Apply ground-height offset in retarget
 
 control:
-  keyboard_toggle_send: true
-  keyboard_backend: "stdin"
-  toggle_send_key: "k"
-  hold_position_key: "p"
-  hand_source_timeout_s: 0.5
-  evdev_device: "auto"
-  evdev_grab: false
-  control_gripper_hand_action: false
-  pinch_mode: false
-  hand_step: 0.05
+  safe_idle_pose_id: "0"                                         # Safe idle preset id(s) for fallback
+  ramp_ease: "cosine"                                            # Easing function for ramp transitions
+  start_ramp_seconds: 3.0                                        # Startup ramp duration (seconds)
+  toggle_ramp_seconds: 3.0                                       # Toggle ramp duration (seconds)
+  exit_ramp_seconds: 3.0                                         # Exit ramp duration (seconds)
+  keyboard_toggle_send: true                                     # Enable keyboard send/hold toggles
+  keyboard_backend: "stdin"                                      # Keyboard backend: stdin/evdev/both/none
+  toggle_send_key: "k"                                           # Key to toggle send/default mode
+  hold_position_key: "p"                                         # Key to toggle hold mode
+  hand_source_timeout_s: 0.5                                     # Hand data freshness timeout (seconds)
+  evdev_device: "auto"                                           # Evdev input device path or auto
+  evdev_grab: false                                              # Grab evdev device exclusively
 
 adapters:
-  vdmocap: {}
+  vdmocap: {}                                                    # VDMocap adapter section (currently no extra options)
   vdhand:
-    hand_fk: true
-    hand_fk_end_site_scale: "0.858,0.882,0.882,0.882,0.882"
-    publish_bvh_hand: true
+    hand_fk: true                                                # Enable FK-based hand tracking reconstruction
+    hand_fk_end_site_scale: "0.858,0.882,0.882,0.882,0.882"      # End-site scale for thumb/index/middle/ring/little
   manus:
-    address: "tcp://localhost:8000"
-    left_sn: "85ab6e24"
-    right_sn: "c152afa7"
-    auto_assign: true
-    recv_timeout_ms: 20
-    flip_x: true
+    address: "tcp://localhost:8000"                              # Manus bridge address
+    left_sn: "85ab6e24"                                          # Preferred left glove serial number
+    right_sn: "c152afa7"                                         # Preferred right glove serial number
+    auto_assign: true                                            # Auto-assign gloves when SN is unavailable
+    recv_timeout_ms: 20                                          # Manus receive timeout (ms)
+    flip_x: true                                                 # Mirror X-axis for coordinate alignment
   slimevr:
-    vmc_ip: "0.0.0.0"
-    vmc_port: 39539
-    vmc_timeout_s: 0.5
-    vmc_rot_mode: "local"
-    vmc_invert_zw: false
-    vmc_use_fk: true
-    vmc_use_viewer_fk: true
-    vmc_fk_skeleton: "bvh"
-    vmc_bvh_path: "assets/slimevr/bvh-recording.bvh"
-    vmc_bvh_scale: 0.01
-    vmc_viewer_bone_axis_override: "Hips:flip=yz;Spine:flip=yz;Spine1:flip=yz;Neck:flip=yz;Head:flip=yz;LeftUpperArm:flip=x;RightUpperArm:flip=x;LeftLowerArm:flip=x;RightLowerArm:flip=x;LeftHand:flip=x;RightHand:flip=x;LeftUpperLeg:flip=x;RightUpperLeg:flip=x;LeftLowerLeg:flip=x;RightLowerLeg:flip=x;LeftFoot:flip=x;RightFoot:flip=x"
+    vmc_ip: "0.0.0.0"                                            # VMC listen IP for SlimeVR stream
+    vmc_port: 39539                                              # VMC UDP port
+    vmc_timeout_s: 0.5                                           # VMC frame timeout (seconds)
+    vmc_rot_mode: "local"                                        # Rotation mode: local/global mapping
+    vmc_use_fk: true                                             # Enable FK to recover full body pose
+    vmc_use_viewer_fk: true                                      # Prefer viewer-provided FK when available
+    vmc_fk_skeleton: "bvh"                                       # FK skeleton type: bvh/std
+    vmc_bvh_path: "assets/slimevr/bvh-recording.bvh"             # BVH skeleton file used by FK
+    vmc_bvh_scale: 0.01                                          # BVH global scale factor
 
 policy:
   sonic:
-    enable_zmq_pose: true
-    zmq_bind_host: "0.0.0.0"
-    zmq_pose_port: 5556
-    zmq_pose_topic: "pose"
-    zmq_num_frames_to_send: 1
-    zmq_frame_index_step: 2
-    zmq_use_mailbox: true
-    zmq_heading_increment: 0.0
-    zmq_catch_up: true
-    zmq_include_hand_joints: true
-  twist2: {}
+    zmq_bind_host: "0.0.0.0"                                     # ZMQ bind host for pose publisher
+    zmq_pose_port: 5556                                          # ZMQ bind port for pose publisher
+    zmq_pose_topic: "pose"                                       # ZMQ topic name for pose messages
+    zmq_num_frames_to_send: 1                                    # Number of pose frames packed per publish
+    zmq_frame_index_step: 2                                      # Frame-index increment between packed frames
+    zmq_use_mailbox: true                                        # Use mailbox thread for non-blocking ZMQ send
+    zmq_catch_up: true                                           # catch_up flag in pose payload
+  twist2:
+    smooth: false                                                # Enable body smoothing
+    smooth_window_size: 5                                        # Smoothing window size (frames)

@@ -256,30 +256,8 @@ def build_manus_tracking(
     return ht_l, ht_r
 
 
-def build_manus_bvh_payload(
-    *,
-    fr_hand: Optional[Dict[str, Any]],
-    ht_l_active: bool,
-    ht_r_active: bool,
-    now_ms: int,
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    bvh_l: Dict[str, Any] = {"is_active": bool(ht_l_active), "timestamp": now_ms}
-    bvh_r: Dict[str, Any] = {"is_active": bool(ht_r_active), "timestamp": now_ms}
-    if not isinstance(fr_hand, dict):
-        return bvh_l, bvh_r
-    if bool(ht_l_active) and ("manus_left_xyz25" in fr_hand):
-        bvh_l["manus_xyz25"] = np.asarray(fr_hand["manus_left_xyz25"], dtype=np.float32).reshape(25, 3).tolist()
-    if bool(ht_r_active) and ("manus_right_xyz25" in fr_hand):
-        bvh_r["manus_xyz25"] = np.asarray(fr_hand["manus_right_xyz25"], dtype=np.float32).reshape(25, 3).tolist()
-    return bvh_l, bvh_r
-
-
 def build_manus_runtime(_cfg: ManusRuntimeConfig) -> Dict[str, Any]:
-    from deploy_real.common.teleop_compat import _hand_pose_from_value
-
     return {
-        "_hand_pose_from_value": _hand_pose_from_value,
         "build_hand_tracking": build_manus_tracking,
-        "build_hand_bvh_payload": build_manus_bvh_payload,
     }
 

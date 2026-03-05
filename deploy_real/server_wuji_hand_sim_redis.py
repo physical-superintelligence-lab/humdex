@@ -212,9 +212,8 @@ class WujiHandSimRedisViz:
         hand_side: str,
         target_fps: float,
         freshness_ms: int,
-        mjcf_path: Optional[str],
-        write_action_target: bool,
-        verbose: bool,
+        smooth_enabled: bool,
+        smooth_steps: int,
         # mode switch: DexPilot retarget (default) vs GeoRT model inference
         use_model: bool,
         policy_tag: str,
@@ -223,16 +222,14 @@ class WujiHandSimRedisViz:
         clamp_min: float,
         clamp_max: float,
         max_delta_per_step: float,
-        print_distances_and_exit: bool,
-        disable_dexpilot_projection: bool,
         config_path: Optional[str],
     ) -> None:
         self.hand_side = hand_side.strip().lower()
         assert self.hand_side in ["left", "right"]
         self.target_fps = float(target_fps)
         self.freshness_ms = int(freshness_ms)
-        self.write_action_target = bool(write_action_target)
-        self.verbose = bool(verbose)
+        self.smooth_enabled = bool(smooth_enabled)
+        self.smooth_steps = max(1, int(smooth_steps))
         self.use_model = bool(use_model)
         self.policy_tag = str(policy_tag)
         self.policy_epoch = int(policy_epoch)
@@ -240,8 +237,6 @@ class WujiHandSimRedisViz:
         self.clamp_min = float(clamp_min)
         self.clamp_max = float(clamp_max)
         self.max_delta_per_step = float(max_delta_per_step)
-        self.print_distances_and_exit = bool(print_distances_and_exit)
-        self.disable_dexpilot_projection = bool(disable_dexpilot_projection)
         self.config_path = config_path
 
         self.running = True
@@ -310,20 +305,6 @@ class WujiHandSimRedisViz:
             self._wuji_reorder_idx = _build_wuji_reorder_idx(self.retargeter)
             if self._wuji_reorder_idx is None:
                 print("[WujiHandSim] [WARN] Failed to infer reorder indices from joint names; fallback to reshape(5,4)")
-            # Optional: disable DexPilot pinch projection (same intent as server_wuji_hand_redis.py)
-            try:
-                if self.disable_dexpilot_projection:
-                    opt = getattr(self.retargeter, "optimizer", None)
-                    if opt is not None:
-                        # Make projection never trigger: dist < 0 is impossible.
-                        if hasattr(opt, "project_dist"):
-                            opt.project_dist = 0.0
-                        if hasattr(opt, "escape_dist"):
-                            opt.escape_dist = 0.0
-                    print("[WujiHandSim] [OK] DexPilot projection disabled (project_dist/escape_dist=0)")
-            except Exception:
-                pass
-
         # Load MuJoCo model
         try:
             import mujoco  # type: ignore
@@ -334,10 +315,9 @@ class WujiHandSimRedisViz:
         self._mujoco = mujoco
         self._mjviewer = mujoco.viewer
 
-        if mjcf_path is None or str(mjcf_path).strip() == "":
-            mjcf_path = str(
-                (project_root / "wuji-retargeting" / "example" / "utils" / "mujoco-sim" / "wuji_hand_description" / "mjcf" / f"{self.hand_side}.xml").resolve()
-            )
+        mjcf_path = str(
+            (project_root / "wuji-retargeting" / "example" / "utils" / "mujoco-sim" / "wuji_hand_description" / "mjcf" / f"{self.hand_side}.xml").resolve()
+        )
         self.mjcf_path = str(mjcf_path)
         if not Path(self.mjcf_path).exists():
             raise FileNotFoundError(f"MuJoCo model file not found: {self.mjcf_path}")
@@ -395,7 +375,7 @@ class WujiHandSimRedisViz:
             return False, None
 
     def _retarget_to_wuji20(self, hand_dict: Dict[str, Any]) -> np.ndarray:
-        mp21 = hand_26d_to_mediapipe_21d(hand_dict, self.hand_side, print_distances=bool(self.print_distances_and_exit))
+        mp21 = hand_26d_to_mediapipe_21d(hand_dict, self.hand_side, print_distances=False)
         mp21_t = self._apply_mediapipe_transformations(mp21, hand_type=self.hand_side)
         if self.use_model:
             if self.model_infer is None:
@@ -428,13 +408,38 @@ class WujiHandSimRedisViz:
         return q
 
     def _publish_action_target(self, qpos_5x4: np.ndarray) -> None:
-        if not self.write_action_target:
-            return
         try:
             self.redis_client.set(self.redis_key_action_wuji_qpos_target, json.dumps(np.asarray(qpos_5x4, dtype=float).reshape(-1).tolist()))
             self.redis_client.set(self.redis_key_t_action_wuji_hand, now_ms())
         except Exception:
             pass
+
+    def _set_ctrl_from_qpos(self, qpos_5x4: np.ndarray) -> None:
+        flat = np.asarray(qpos_5x4, dtype=np.float32).reshape(-1)
+        n = min(int(self.model.nu), int(flat.shape[0]))
+        self.data.ctrl[:n] = flat[:n]
+
+    def _step_sim_towards(self, start_qpos: np.ndarray, target_qpos: np.ndarray, steps_per_ctrl: int) -> None:
+        start = np.asarray(start_qpos, dtype=np.float32).reshape(5, 4)
+        target = np.asarray(target_qpos, dtype=np.float32).reshape(5, 4)
+        total_steps = max(1, int(steps_per_ctrl))
+
+        if (not self.smooth_enabled) or self.smooth_steps <= 1:
+            self._set_ctrl_from_qpos(target)
+            for _ in range(total_steps):
+                self._mujoco.mj_step(self.model, self.data)
+            return
+
+        interp_n = max(2, int(self.smooth_steps))
+        base = total_steps // interp_n
+        rem = total_steps % interp_n
+        ts = np.linspace(0.0, 1.0, interp_n, dtype=np.float32)
+        for i, t in enumerate(ts):
+            q = start * (1.0 - float(t)) + target * float(t)
+            self._set_ctrl_from_qpos(q)
+            chunk_steps = base + (1 if i < rem else 0)
+            for _ in range(chunk_steps):
+                self._mujoco.mj_step(self.model, self.data)
 
     def run(self) -> int:
         def _handle_signal(signum: int, _frame: Any) -> None:
@@ -449,6 +454,7 @@ class WujiHandSimRedisViz:
         print(f"[WujiHandSim] mjcf: {self.mjcf_path}")
         print(f"[WujiHandSim] redis: {self.redis_client.connection_pool.connection_kwargs.get('host', '')}:6379")
         print(f"[WujiHandSim] keys : {self.redis_key_hand_tracking} / {self.redis_key_wuji_mode}")
+        print(f"[WujiHandSim] smoothing: {'off' if not self.smooth_enabled else f'on (steps={self.smooth_steps})'}")
         print("=" * 70)
 
         ctrl_dt = 1.0 / max(1.0, float(self.target_fps))
@@ -467,43 +473,34 @@ class WujiHandSimRedisViz:
                 last_print = 0.0
                 while self.running and viewer.is_running():
                     t0 = time.time()
+                    prev_qpos = np.asarray(self.last_qpos, dtype=np.float32).reshape(5, 4).copy()
+                    cmd_qpos = prev_qpos.copy()
 
                     mode = self._get_mode()
                     if mode in ["default", "hold"]:
                         target = self.zero_pose if mode == "default" else self.last_qpos
-                        self.last_qpos = np.asarray(target, dtype=np.float32).reshape(5, 4).copy()
-                        self._publish_action_target(self.last_qpos)
+                        cmd_qpos = np.asarray(target, dtype=np.float32).reshape(5, 4).copy()
+                        self._publish_action_target(cmd_qpos)
                     else:
                         # 1) Preferred: retarget from hand_tracking_* (requires pinocchio)
                         ok, hand_dict = self._read_tracking26()
                         if ok and hand_dict is not None:
                             try:
-                                if self.print_distances_and_exit:
-                                    # Print once then exit (same intent as server_wuji_hand_redis.py)
-                                    _ = hand_26d_to_mediapipe_21d(hand_dict, self.hand_side, print_distances=True)
-                                    print("\n[OK] Distance info printed. Exiting.")
-                                    self.running = False
-                                    break
                                 q = self._retarget_to_wuji20(hand_dict).astype(np.float32)
                                 if self.use_model:
                                     q = self._apply_safety(q)
-                                self.last_qpos = q
-                                self._publish_action_target(self.last_qpos)
+                                cmd_qpos = np.asarray(q, dtype=np.float32).reshape(5, 4)
+                                self._publish_action_target(cmd_qpos)
                             except Exception as e:
-                                if self.verbose:
-                                    print(f"[WujiHandSim] [WARN] retarget failed: {e}")
+                                print(f"[WujiHandSim] [WARN] retarget failed: {e}")
 
-                    flat = self.last_qpos.reshape(-1)
-                    n = min(int(self.model.nu), int(flat.shape[0]))
-                    self.data.ctrl[:n] = flat[:n]
-
-                    for _ in range(steps_per_ctrl):
-                        self._mujoco.mj_step(self.model, self.data)
+                    self._step_sim_towards(prev_qpos, cmd_qpos, steps_per_ctrl)
+                    self.last_qpos = cmd_qpos.copy()
 
                     viewer.sync()
 
                     # light status print
-                    if self.verbose and (time.time() - last_print) > 2.0:
+                    if (time.time() - last_print) > 2.0:
                         last_print = time.time()
                         print(f"[WujiHandSim] mode={mode} fps={1.0/max(1e-6, (time.time()-t0)):.1f} steps={steps_per_ctrl}")
 
@@ -526,24 +523,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--redis_ip", type=str, default="localhost", help="Redis host")
     p.add_argument("--target_fps", type=float, default=60.0, help="Control/render update rate (Hz)")
     p.add_argument("--freshness_ms", type=int, default=500, help="Freshness threshold for hand_tracking data (ms)")
-    p.add_argument("--mjcf_path", type=str, default="", help="Optional hand model XML path (default: wuji_retargeting/example/utils/mujoco-sim/model/{side}.xml)")
+    p.add_argument("--no_smooth", action="store_true", help="Disable command smoothing")
+    p.add_argument("--smooth_steps", type=int, default=5, help="Smoothing interpolation steps")
     p.add_argument(
         "--config",
         type=str,
         default="",
         help="Retarget YAML config path. If empty, use default by hand side: wuji-retargeting/example/config/retarget_manus_<hand>.yaml",
-    )
-    p.add_argument("--no_write_action_target", action="store_true", help="Do not write action_wuji_qpos_target_* back to Redis")
-    p.add_argument("--verbose", action="store_true", help="Print verbose logs")
-    p.add_argument(
-        "--print_distances_and_exit",
-        action="store_true",
-        help="Print wrist->fingertip distances once (after 26D->21D and before transforms), then exit.",
-    )
-    p.add_argument(
-        "--disable_dexpilot_projection",
-        action="store_true",
-        help="Disable DexPilot pinch projection (set project_dist/escape_dist to 0; DexPilot mode only)",
     )
     # mode switch (align with deploy2.py / wuji_hand_model_deploy.sh)
     p.add_argument("--use_model", action="store_true", help="Use GeoRT model inference (default off; DexPilot retarget otherwise)")
@@ -584,9 +570,8 @@ def main() -> int:
         hand_side=str(args.hand_side),
         target_fps=float(args.target_fps),
         freshness_ms=int(args.freshness_ms),
-        mjcf_path=(str(args.mjcf_path).strip() or None),
-        write_action_target=not bool(args.no_write_action_target),
-        verbose=bool(args.verbose),
+        smooth_enabled=not bool(args.no_smooth),
+        smooth_steps=int(args.smooth_steps),
         use_model=bool(args.use_model),
         policy_tag=str(args.policy_tag),
         policy_epoch=int(args.policy_epoch),
@@ -594,8 +579,6 @@ def main() -> int:
         clamp_min=float(args.clamp_min),
         clamp_max=float(args.clamp_max),
         max_delta_per_step=float(args.max_delta_per_step),
-        print_distances_and_exit=bool(args.print_distances_and_exit),
-        disable_dexpilot_projection=bool(args.disable_dexpilot_projection),
         config_path=selected_config,
     )
     return int(viz.run())

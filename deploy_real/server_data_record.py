@@ -285,10 +285,9 @@ def parse_args():
     # key namespace
     parser.add_argument("--robot_key", default="unitree_g1_with_hands", help="Redis key suffix, e.g. unitree_g1_with_hands")
     parser.add_argument("--channel", choices=["twist2", "sonic"], default="twist2", help="Channel label used for Redis key fallback policy")
-    parser.add_argument("--sonic_body_backend", choices=["redis", "zmq"], default="zmq", help="Body source for sonic channel")
-    parser.add_argument("--body_zmq_ip", default="127.0.0.1", help="Body ZMQ publisher IP (used when sonic+zmq)")
-    parser.add_argument("--body_zmq_port", default=5556, type=int, help="Body ZMQ publisher port (used when sonic+zmq)")
-    parser.add_argument("--body_zmq_topic", default="pose", help="Body ZMQ topic (used when sonic+zmq)")
+    parser.add_argument("--body_zmq_ip", default="127.0.0.1", help="Body ZMQ publisher IP (used when channel=sonic)")
+    parser.add_argument("--body_zmq_port", default=5556, type=int, help="Body ZMQ publisher port (used when channel=sonic)")
+    parser.add_argument("--body_zmq_topic", default="pose", help="Body ZMQ topic (used when channel=sonic)")
 
     # vision
     parser.add_argument("--vision_backend", choices=["zmq", "realsense"], default="zmq", help="Image source: zmq (network stream) or realsense (direct capture)")
@@ -432,7 +431,7 @@ def main():
 
     # Compose redis keys
     suffix = args.robot_key
-    use_body_zmq = (str(args.channel).lower() == "sonic") and (str(args.sonic_body_backend).lower() == "zmq")
+    use_body_zmq = (str(args.channel).lower() == "sonic")
     key_specs = build_redis_key_candidates(channel=args.channel, suffix=suffix, body_from_redis=(not use_body_zmq))
     flat_keys: List[str] = []
     for _dk, cands in key_specs:

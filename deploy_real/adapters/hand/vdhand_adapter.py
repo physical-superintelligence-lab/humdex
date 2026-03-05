@@ -236,28 +236,6 @@ def build_vdhand_tracking(
     return ht_l, ht_r
 
 
-def build_vdhand_bvh_payload(
-    *,
-    fr_hand: Optional[Dict[str, Any]],
-    ht_l_active: bool,
-    ht_r_active: bool,
-    now_ms: int,
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    if not isinstance(fr_hand, dict):
-        return {"is_active": False, "timestamp": now_ms}, {"is_active": False, "timestamp": now_ms}
-    bvh_l = {"is_active": bool(ht_l_active), "timestamp": now_ms}
-    bvh_r = {"is_active": bool(ht_r_active), "timestamp": now_ms}
-    for n, v in fr_hand.items():
-        if not (isinstance(v, (list, tuple)) and len(v) >= 1):
-            continue
-        p = np.asarray(v[0], dtype=np.float32).reshape(3).tolist()
-        if str(n).startswith("Left"):
-            bvh_l[str(n)] = [p, [1.0, 0.0, 0.0, 0.0]]
-        elif str(n).startswith("Right"):
-            bvh_r[str(n)] = [p, [1.0, 0.0, 0.0, 0.0]]
-    return bvh_l, bvh_r
-
-
 def build_vdhand_runtime(cfg: VdhandRuntimeConfig) -> Dict[str, Any]:
     from deploy_real.pose_csv_loader import (  # type: ignore
         apply_bvh_like_coordinate_transform,
@@ -267,7 +245,6 @@ def build_vdhand_runtime(cfg: VdhandRuntimeConfig) -> Dict[str, Any]:
         INITIAL_POSITION_HAND_LEFT,
         INITIAL_POSITION_HAND_RIGHT,
         _parse_hand_fk_end_site_scale,
-        _hand_pose_from_value,
         _hand_to_tracking26,
         _hand_joint_order_names,
         _fk_hand_positions_with_end_sites,
@@ -276,14 +253,11 @@ def build_vdhand_runtime(cfg: VdhandRuntimeConfig) -> Dict[str, Any]:
 
     runtime: Dict[str, Any] = {
         "_hand_to_tracking26": _hand_to_tracking26,
-        "_hand_pose_from_value": _hand_pose_from_value,
         "_hand_joint_order_names": _hand_joint_order_names,
         "_fk_hand_positions_with_end_sites": _fk_hand_positions_with_end_sites,
         "_safe_quat_wxyz": _safe_quat_wxyz,
         "build_hand_tracking": build_vdhand_tracking,
-        "build_hand_bvh_payload": build_vdhand_bvh_payload,
         "build_vdhand_tracking": build_vdhand_tracking,
-        "build_vdhand_bvh_payload": build_vdhand_bvh_payload,
         "hand_fk_end_site_scale": _parse_hand_fk_end_site_scale(str(cfg.hand_fk_end_site_scale)),
         "fk_bone_left": None,
         "fk_bone_right": None,

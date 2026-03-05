@@ -330,7 +330,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--frequency", type=int, default=30)
     p.add_argument("--robot_key", default="unitree_g1_with_hands")
     p.add_argument("--channel", choices=["twist2", "sonic"], default="twist2")
-    p.add_argument("--sonic_body_backend", choices=["redis", "zmq"], default="zmq")
     p.add_argument("--body_zmq_ip", default="127.0.0.1")
     p.add_argument("--body_zmq_port", type=int, default=5556)
     p.add_argument("--body_zmq_topic", default="pose")
@@ -507,7 +506,7 @@ def main() -> int:
     )
 
     suffix = str(args.robot_key)
-    use_body_zmq = (str(args.channel).lower() == "sonic") and (str(args.sonic_body_backend).lower() == "zmq")
+    use_body_zmq = (str(args.channel).lower() == "sonic")
     key_specs = build_redis_key_candidates(channel=args.channel, suffix=suffix, body_from_redis=(not use_body_zmq))
     flat_keys: List[str] = []
     for _dk, cands in key_specs:

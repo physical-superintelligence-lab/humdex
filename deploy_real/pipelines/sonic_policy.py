@@ -73,7 +73,6 @@ def build_pipeline(body_source: str, hand_source: str, passthrough: List[str] | 
             "target_fps",
             "hands",
             "keyboard_backend",
-            "enable_zmq_pose",
             "zmq_bind_host",
             "zmq_pose_port",
             "zmq_pose_topic",

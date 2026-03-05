@@ -4,10 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}/deploy_real"
 
-# Redis endpoint used by teleop/sim2real
-redis_ip="localhost"
 channel="twist2"   # twist2 | sonic
-sonic_body_backend="zmq"  # redis | zmq
+redis_ip="localhost"
 body_zmq_ip="127.0.0.1"
 body_zmq_port=5556
 body_zmq_topic="pose"
@@ -23,7 +21,6 @@ task_name="${task_name_base}_${channel}"
 python server_data_record.py \
   --redis_ip "${redis_ip}" \
   --channel "${channel}" \
-  --sonic_body_backend "${sonic_body_backend}" \
   --body_zmq_ip "${body_zmq_ip}" \
   --body_zmq_port "${body_zmq_port}" \
   --body_zmq_topic "${body_zmq_topic}" \
@@ -33,8 +30,6 @@ python server_data_record.py \
   --vision_ip "${vision_ip}" \
   --vision_port "${vision_port}" \
   --save_episode_video \
-  # --keyboard_backend evdev \
-  # --evdev_device /dev/input/by-id/usb-PCsensor_FootSwitch-event-kbd \
-  # "$@"
+  "$@"
 
 

@@ -16,11 +16,8 @@ python server_wuji_hand_redis.py \
     --redis_ip ${redis_ip} \
     --target_fps ${target_fps} \
     --no_smooth \
-    # --disable_dexpilot_projection \
     # --use_model \
     # --policy_tag wuji_left_new_1 \
     # --policy_epoch 200
-    # --pinch_project_ratio 0.03 \
-    # --pinch_escape_ratio 0.04 \
 
 

@@ -23,7 +23,6 @@ from deploy_real.adapters.hand.vdhand_adapter import (
     VdhandConfig,
     VdhandReader,
     VdhandRuntimeConfig,
-    build_vdhand_bvh_payload,
     build_vdhand_runtime,
     build_vdhand_tracking,
 )
@@ -133,13 +132,11 @@ def init_source_readers(
                     vmc_port=int(cfg.vmc_port),
                     vmc_timeout_s=float(cfg.vmc_timeout_s),
                     vmc_rot_mode=str(cfg.vmc_rot_mode),
-                    vmc_invert_zw=bool(cfg.vmc_invert_zw),
                     vmc_use_fk=bool(cfg.vmc_use_fk),
                     vmc_use_viewer_fk=bool(cfg.vmc_use_viewer_fk),
                     vmc_fk_skeleton=str(cfg.vmc_fk_skeleton),
                     vmc_bvh_path=str(cfg.vmc_bvh_path),
                     vmc_bvh_scale=float(cfg.vmc_bvh_scale),
-                    vmc_viewer_bone_axis_override=str(cfg.vmc_viewer_bone_axis_override),
                 )
             )
             br.initialize()
@@ -191,7 +188,6 @@ def init_keyboard_toggle(components: Dict[str, Any], cfg: Any, KeyboardToggle: A
             enable=True,
             toggle_send_key=str(cfg.toggle_send_key),
             hold_key=str(cfg.hold_position_key),
-            hand_step=float(cfg.hand_step),
             backend=kb_backend,
             evdev_device=str(cfg.evdev_device),
             evdev_grab=bool(cfg.evdev_grab),
@@ -256,7 +252,7 @@ def stage_apply_keyboard_state(state: Any) -> None:
     assert isinstance(comps, dict)
     kb = comps.get("keyboard_toggle", None)
     if kb is not None:
-        send_enabled, hold_enabled, exit_requested, _l, _r = kb.get_extended_state()
+        send_enabled, hold_enabled, exit_requested = kb.get_extended_state()
         state.send_enabled = bool(send_enabled)
         state.hold_enabled = bool(hold_enabled and send_enabled)
         state.exit_requested = bool(exit_requested)
@@ -353,23 +349,6 @@ def _compute_hand_activity(state: Any, cfg: Any) -> tuple[int, str, bool]:
         hand_fresh = (time.time() - float(state.last_hand_frame_time)) <= float(cfg.hand_source_timeout_s)
     is_active = bool(state.send_enabled and (not state.hold_enabled) and hand_fresh and hands_mode != "none")
     return now_ms, hands_mode, is_active
-
-
-def _compute_gripper_joints(comps: Dict[str, Any], state: Any, cfg: Any) -> tuple[np.ndarray, np.ndarray]:
-    lh = np.zeros((7,), dtype=np.float32)
-    rh = np.zeros((7,), dtype=np.float32)
-    if not bool(cfg.control_gripper_hand_action):
-        return lh, rh
-    kb = comps.get("keyboard_toggle", None)
-    lv = rv = 0.0
-    if kb is not None and hasattr(kb, "get_extended_state"):
-        _send, _hold, _exit, lv, rv = kb.get_extended_state()
-    hand_pose_fn = comps.get("_hand_pose_from_value", None)
-    if callable(hand_pose_fn):
-        _lh7, _rh7 = hand_pose_fn("unitree_g1", float(lv), float(rv), pinch_mode=bool(cfg.pinch_mode))
-        lh = np.asarray(_lh7, dtype=np.float32).reshape(-1)
-        rh = np.asarray(_rh7, dtype=np.float32).reshape(-1)
-    return lh, rh
 
 
 def _build_policy_components(*, include_zmq: bool) -> Dict[str, Any]:
@@ -474,7 +453,7 @@ def _enable_sonic_zmq(components: Dict[str, Any], cfg: Any) -> None:
     zmq_step = int(cfg.zmq_frame_index_step) if int(cfg.zmq_frame_index_step) > 0 else (
         max(1, int(round(100.0 / float(cfg.target_fps)))) if float(cfg.target_fps) > 1e-6 else 1
     )
-    if bool(cfg.enable_zmq_pose) and (pack_pose_message is not None):
+    if pack_pose_message is not None:
         components["zmq_publisher"] = create_zmq_pose_publisher(
             bind_host=str(cfg.zmq_bind_host),
             port=int(cfg.zmq_pose_port),
@@ -513,7 +492,7 @@ def _enable_sonic_zmq(components: Dict[str, Any], cfg: Any) -> None:
             th.start()
             components["zmq_sender_thread"] = th
         components["zmq_ready"] = True
-    elif bool(cfg.enable_zmq_pose):
+    else:
         components["zmq_error"] = "pack_pose_message_not_found"
 
 
@@ -567,13 +546,6 @@ def _compute_retarget_outputs(
                 if sm is not None:
                     body_35 = np.asarray(sm, dtype=float).reshape(-1).tolist()
         state.last_qpos = q.copy()
-        if bool(cfg.control_neck) and (fr_gmr is not None):
-            try:
-                ny, npitch = comps["human_head_to_robot_neck"](fr_gmr)
-                s = float(cfg.neck_retarget_scale)
-                neck_2 = [float(ny) * s, float(npitch) * s]
-            except Exception:
-                neck_2 = [0.0, 0.0]
     return {
         "body_35": body_35,
         "neck_2": neck_2,
@@ -613,21 +585,15 @@ def _build_hand_tracking_outputs(
     cfg: Any,
     comps: Dict[str, Any],
     requires_tracking_symbol: bool,
-    include_bvh: bool,
 ) -> Dict[str, Any]:
     tracking_fn = comps.get("build_hand_tracking", None)
     if not callable(tracking_fn):
         tracking_fn = build_vdhand_tracking
-    bvh_fn = comps.get("build_hand_bvh_payload", None)
-    if not callable(bvh_fn):
-        bvh_fn = build_vdhand_bvh_payload
     if requires_tracking_symbol and (not callable(tracking_fn)):
         now_ms = int(time.time() * 1000)
         return {
             "hand_tracking_left": {"is_active": False, "timestamp": now_ms},
             "hand_tracking_right": {"is_active": False, "timestamp": now_ms},
-            "hand_bvh_left": None,
-            "hand_bvh_right": None,
         }
     now_ms, hands_mode, is_active = _compute_hand_activity(state, cfg)
     ht_l, ht_r = tracking_fn(
@@ -638,28 +604,15 @@ def _build_hand_tracking_outputs(
         cfg_hand_fk=bool(cfg.hand_fk),
         runtime=comps,
     )
-    bvh_l = bvh_r = None
-    if include_bvh and bool(cfg.publish_bvh_hand):
-        bvh_l, bvh_r = bvh_fn(
-            fr_hand=state.context.get("hand_frame", None),
-            ht_l_active=bool(ht_l.get("is_active", False)),
-            ht_r_active=bool(ht_r.get("is_active", False)),
-            now_ms=now_ms,
-        )
     return {
         "hand_tracking_left": ht_l,
         "hand_tracking_right": ht_r,
-        "hand_bvh_left": bvh_l,
-        "hand_bvh_right": bvh_r,
     }
 
 
-def _store_hand_outputs(state: Any, out: Dict[str, Any], *, with_bvh: bool) -> None:
+def _store_hand_outputs(state: Any, out: Dict[str, Any]) -> None:
     state.context["hand_tracking_left"] = out["hand_tracking_left"]
     state.context["hand_tracking_right"] = out["hand_tracking_right"]
-    if with_bvh:
-        state.context["hand_bvh_left"] = out["hand_bvh_left"]
-        state.context["hand_bvh_right"] = out["hand_bvh_right"]
 
 
 def _apply_hand_side_mask(
@@ -668,20 +621,14 @@ def _apply_hand_side_mask(
     now_ms: int,
     ht_l: Dict[str, Any],
     ht_r: Dict[str, Any],
-    bvh_l: Dict[str, Any] | None,
-    bvh_r: Dict[str, Any] | None,
-) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
-    out_bvh_l = dict(bvh_l) if isinstance(bvh_l, dict) else {"is_active": False, "timestamp": now_ms}
-    out_bvh_r = dict(bvh_r) if isinstance(bvh_r, dict) else {"is_active": False, "timestamp": now_ms}
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
     out_ht_l = dict(ht_l)
     out_ht_r = dict(ht_r)
     if hands_mode in ["none", "right"]:
         out_ht_l = {"is_active": False, "timestamp": now_ms}
-        out_bvh_l = {"is_active": False, "timestamp": now_ms}
     if hands_mode in ["none", "left"]:
         out_ht_r = {"is_active": False, "timestamp": now_ms}
-        out_bvh_r = {"is_active": False, "timestamp": now_ms}
-    return out_ht_l, out_ht_r, out_bvh_l, out_bvh_r
+    return out_ht_l, out_ht_r
 
 
 def _prepare_hand_publish_payload(
@@ -692,34 +639,22 @@ def _prepare_hand_publish_payload(
     now_ms: int,
     ht_l: Dict[str, Any],
     ht_r: Dict[str, Any],
-    bvh_l: Dict[str, Any] | None,
-    bvh_r: Dict[str, Any] | None,
     apply_side_mask: bool,
 ) -> Dict[str, Any]:
     mode_l, mode_r, ht_l2, ht_r2 = _resolve_hand_modes(state=state, cfg=cfg, now_ms=now_ms, ht_l=dict(ht_l), ht_r=dict(ht_r))
     hands_mode = str(cfg.hands).lower()
     if apply_side_mask:
-        ht_l2, ht_r2, bvh_l2, bvh_r2 = _apply_hand_side_mask(
+        ht_l2, ht_r2 = _apply_hand_side_mask(
             hands_mode=hands_mode,
             now_ms=now_ms,
             ht_l=ht_l2,
             ht_r=ht_r2,
-            bvh_l=bvh_l if isinstance(bvh_l, dict) else None,
-            bvh_r=bvh_r if isinstance(bvh_r, dict) else None,
         )
-    else:
-        bvh_l2 = dict(bvh_l) if isinstance(bvh_l, dict) else None
-        bvh_r2 = dict(bvh_r) if isinstance(bvh_r, dict) else None
-    lh, rh = _compute_gripper_joints(comps, state, cfg)
     return {
         "mode_l": mode_l,
         "mode_r": mode_r,
         "ht_l": ht_l2,
         "ht_r": ht_r2,
-        "bvh_l": bvh_l2,
-        "bvh_r": bvh_r2,
-        "lh": lh,
-        "rh": rh,
     }
 
 
@@ -731,16 +666,11 @@ def _write_wuji_hand_redis(
     mode_r: str,
     ht_l: Dict[str, Any],
     ht_r: Dict[str, Any],
-    bvh_l: Dict[str, Any] | None,
-    bvh_r: Dict[str, Any] | None,
-    publish_bvh_hand: bool,
 ) -> None:
     robot_key = "unitree_g1_with_hands"
     key_t_action = "t_action"
     key_ht_l = f"hand_tracking_left_{robot_key}"
     key_ht_r = f"hand_tracking_right_{robot_key}"
-    key_bvh_l = f"hand_bvh_left_{robot_key}"
-    key_bvh_r = f"hand_bvh_right_{robot_key}"
     key_wuji_mode_l = f"wuji_hand_mode_left_{robot_key}"
     key_wuji_mode_r = f"wuji_hand_mode_right_{robot_key}"
     pipe = client.pipeline()
@@ -749,16 +679,7 @@ def _write_wuji_hand_redis(
     pipe.set(key_wuji_mode_r, str(mode_r))
     pipe.set(key_ht_l, json.dumps(ht_l))
     pipe.set(key_ht_r, json.dumps(ht_r))
-    if bool(publish_bvh_hand):
-        pipe.set(key_bvh_l, json.dumps(bvh_l if isinstance(bvh_l, dict) else {"is_active": False, "timestamp": now_ms}))
-        pipe.set(key_bvh_r, json.dumps(bvh_r if isinstance(bvh_r, dict) else {"is_active": False, "timestamp": now_ms}))
     pipe.execute()
-
-
-def _apply_hand_payload_to_state(state: Any, hand_payload: Dict[str, Any], *, for_sonic_zmq: bool) -> None:
-    if for_sonic_zmq:
-        state.context["zmq_left_hand_joints"] = hand_payload["lh"]
-        state.context["zmq_right_hand_joints"] = hand_payload["rh"]
 
 
 def _update_last_published_body(state: Any, body_35: Any, neck_2: Any) -> None:
@@ -776,15 +697,12 @@ def _publish_twist2_from_payload(
 ) -> None:
     publish_twist2_step(
         redis_client=client,
-        dry_run=bool(cfg.dry_run),
         body_35=list(body_35),
         hand_tracking_left=dict(hand_payload["ht_l"]),
         hand_tracking_right=dict(hand_payload["ht_r"]),
         wuji_mode_left=str(hand_payload["mode_l"]),
         wuji_mode_right=str(hand_payload["mode_r"]),
         now_ms=int(now_ms),
-        bvh_left=hand_payload["bvh_l"],
-        bvh_right=hand_payload["bvh_r"],
     )
 
 
@@ -803,14 +721,9 @@ def _build_sonic_zmq_payload(state: Any, cfg: Any, *, step: int, n_frames: int, 
         "body_quat_w": np.repeat(bq, n_frames, axis=0),
         "frame_index": np.asarray([frame0 + i * step for i in range(n_frames)], dtype=np.int64),
         "timestamp_realtime": np.asarray([time.time()] * n_frames, dtype=np.float64),
-        "heading_increment": np.asarray([float(cfg.zmq_heading_increment)] * n_frames, dtype=np.float32),
+        "heading_increment": np.asarray([0.0] * n_frames, dtype=np.float32),
         "catch_up": np.asarray([bool(cfg.zmq_catch_up)] * n_frames, dtype=bool),
     }
-    if bool(cfg.zmq_include_hand_joints):
-        lh = np.asarray(state.context.get("zmq_left_hand_joints", np.zeros((7,), dtype=np.float32)), dtype=np.float32).reshape(-1)
-        rh = np.asarray(state.context.get("zmq_right_hand_joints", np.zeros((7,), dtype=np.float32)), dtype=np.float32).reshape(-1)
-        payload["left_hand_joints"] = lh
-        payload["right_hand_joints"] = rh
     return payload
 
 
@@ -862,7 +775,6 @@ def _stage_build_hand_common(
     state: Any,
     cfg: Any,
     requires_tracking_symbol: bool,
-    include_bvh: bool,
 ) -> None:
     comps = state.context["components"]
     out = _build_hand_tracking_outputs(
@@ -870,9 +782,8 @@ def _stage_build_hand_common(
         cfg=cfg,
         comps=comps,
         requires_tracking_symbol=requires_tracking_symbol,
-        include_bvh=include_bvh,
     )
-    _store_hand_outputs(state, out, with_bvh=True)
+    _store_hand_outputs(state, out)
     state.context["stage_build_hand_tracking_ts"] = time.time()
 
 
@@ -884,8 +795,6 @@ def _stage_publish_hand_common(*, state: Any, cfg: Any, mode: str) -> str:
     now_ms = int(time.time() * 1000)
     ht_l = state.context.get("hand_tracking_left", {"is_active": False, "timestamp": now_ms})
     ht_r = state.context.get("hand_tracking_right", {"is_active": False, "timestamp": now_ms})
-    bvh_l = state.context.get("hand_bvh_left", {"is_active": False, "timestamp": now_ms})
-    bvh_r = state.context.get("hand_bvh_right", {"is_active": False, "timestamp": now_ms})
     apply_side_mask = mode == "sonic"
     try:
         hand_payload = _prepare_hand_publish_payload(
@@ -895,17 +804,8 @@ def _stage_publish_hand_common(*, state: Any, cfg: Any, mode: str) -> str:
             now_ms=now_ms,
             ht_l=ht_l,
             ht_r=ht_r,
-            bvh_l=bvh_l if isinstance(bvh_l, dict) else None,
-            bvh_r=bvh_r if isinstance(bvh_r, dict) else None,
             apply_side_mask=apply_side_mask,
         )
-        _apply_hand_payload_to_state(
-            state,
-            hand_payload,
-            for_sonic_zmq=(mode == "sonic"),
-        )
-        if mode == "sonic" and bool(cfg.dry_run):
-            return "dry_run"
         if mode == "twist2":
             body_35 = state.context["retarget_body_35"]
             neck_2 = state.context["retarget_neck_2"]
@@ -925,9 +825,6 @@ def _stage_publish_hand_common(*, state: Any, cfg: Any, mode: str) -> str:
             mode_r=str(hand_payload["mode_r"]),
             ht_l=dict(hand_payload["ht_l"]),
             ht_r=dict(hand_payload["ht_r"]),
-            bvh_l=hand_payload["bvh_l"],
-            bvh_r=hand_payload["bvh_r"],
-            publish_bvh_hand=bool(cfg.publish_bvh_hand),
         )
         return "ok"
     except Exception as e:
@@ -984,7 +881,6 @@ def twist2_stage_build_hand_tracking(state: Any, cfg: Any) -> None:
         state=state,
         cfg=cfg,
         requires_tracking_symbol=True,
-        include_bvh=bool(cfg.publish_bvh_hand),
     )
 
 
@@ -1058,15 +954,11 @@ def sonic_stage_build_hand_tracking(state: Any, cfg: Any) -> None:
         state=state,
         cfg=cfg,
         requires_tracking_symbol=False,
-        include_bvh=True,
     )
 
 
 def sonic_stage_publish_body_zmq(state: Any, cfg: Any) -> None:
     comps = state.context["components"]
-    if not bool(cfg.enable_zmq_pose):
-        state.context["zmq_publish_status"] = "disabled"
-        return
     pub = comps.get("zmq_publisher", None)
     if not isinstance(pub, dict):
         state.context["zmq_publish_status"] = "unavailable"

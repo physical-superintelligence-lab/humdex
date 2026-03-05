@@ -23,11 +23,6 @@ class KeyboardToggle:
         hold_key: str = "p",
         exit_key: str = "q",
         emergency_stop_key: str = "e",
-        left_close_key: str = "z",
-        left_open_key: str = "x",
-        right_close_key: str = "n",
-        right_open_key: str = "m",
-        hand_step: float = 0.05,
         backend: str = "stdin",
         evdev_device: str = "auto",
         evdev_grab: bool = False,
@@ -37,11 +32,6 @@ class KeyboardToggle:
         self.hold_key = (hold_key or "p")[0]
         self.exit_key = (exit_key or "q")[0]
         self.emergency_stop_key = (emergency_stop_key or "e")[0]
-        self.left_close_key = (left_close_key or "z")[0]
-        self.left_open_key = (left_open_key or "x")[0]
-        self.right_close_key = (right_close_key or "n")[0]
-        self.right_open_key = (right_open_key or "m")[0]
-        self.hand_step = float(hand_step)
         self.backend = (backend or "stdin").strip().lower()
         self.evdev_device = str(evdev_device).strip() if evdev_device is not None else "auto"
         self.evdev_grab = bool(evdev_grab)
@@ -49,8 +39,6 @@ class KeyboardToggle:
         self._send_enabled = True
         self._hold_enabled = False
         self._exit_requested = False
-        self._hand_left_position = 0.0
-        self._hand_right_position = 0.0
         self._lock = threading.Lock()
 
         self._thread: Optional[threading.Thread] = None
@@ -59,7 +47,7 @@ class KeyboardToggle:
         self._stdin_old: Any = None
 
     def _print_status(self, *, trigger_key: str) -> None:
-        send_enabled, hold_enabled, exit_requested, _left_pos, _right_pos = self.get_extended_state()
+        send_enabled, hold_enabled, exit_requested = self.get_extended_state()
         if exit_requested:
             banner_style = f"{_ANSI_BOLD}{_ANSI_RED}"
         elif hold_enabled:
@@ -110,14 +98,12 @@ class KeyboardToggle:
         except Exception:
             pass
 
-    def get_extended_state(self) -> Tuple[bool, bool, bool, float, float]:
+    def get_extended_state(self) -> Tuple[bool, bool, bool]:
         with self._lock:
             return (
                 bool(self._send_enabled),
                 bool(self._hold_enabled),
                 bool(self._exit_requested),
-                float(self._hand_left_position),
-                float(self._hand_right_position),
             )
 
     def _emergency_stop(self) -> None:
@@ -152,18 +138,6 @@ class KeyboardToggle:
             line = "=" * len(msg)
             style = f"{_ANSI_BOLD}{_ANSI_RED}"
             print(f"\n{style}{line}{_ANSI_RESET}\n{style}{msg}{_ANSI_RESET}\n{style}{line}{_ANSI_RESET}", flush=True)
-        elif ch == self.left_close_key:
-            with self._lock:
-                self._hand_left_position = float(min(1.0, self._hand_left_position + self.hand_step))
-        elif ch == self.left_open_key:
-            with self._lock:
-                self._hand_left_position = float(max(0.0, self._hand_left_position - self.hand_step))
-        elif ch == self.right_close_key:
-            with self._lock:
-                self._hand_right_position = float(min(1.0, self._hand_right_position + self.hand_step))
-        elif ch == self.right_open_key:
-            with self._lock:
-                self._hand_right_position = float(max(0.0, self._hand_right_position - self.hand_step))
 
     def _loop(self) -> None:
         try:

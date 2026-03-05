@@ -14,13 +14,11 @@ class SlimevrBodyConfig:
     vmc_port: int = 39539
     vmc_timeout_s: float = 0.5
     vmc_rot_mode: str = "local"
-    vmc_invert_zw: bool = True
     vmc_use_fk: bool = True
     vmc_use_viewer_fk: bool = True
     vmc_fk_skeleton: str = "bvh"
     vmc_bvh_path: str = "bvh-recording.bvh"
     vmc_bvh_scale: float = 1.0
-    vmc_viewer_bone_axis_override: str = ""
 
 
 def _safe_quat_wxyz(q: np.ndarray) -> np.ndarray:
@@ -35,10 +33,7 @@ def _normalize_vmc_name(name: str) -> str:
     return "".join([c.lower() for c in str(name) if c.isalnum()])
 
 
-def _vmc_quat_xyzw_to_wxyz(qx: float, qy: float, qz: float, qw: float, invert_zw: bool) -> np.ndarray:
-    if invert_zw:
-        qz = -float(qz)
-        qw = -float(qw)
+def _vmc_quat_xyzw_to_wxyz(qx: float, qy: float, qz: float, qw: float) -> np.ndarray:
     return _safe_quat_wxyz(np.array([qw, qx, qy, qz], dtype=np.float32))
 
 
@@ -387,7 +382,7 @@ def _vmc_build_body_frame(
 
 
 class VmcReceiver:
-    def __init__(self, ip: str, port: int, invert_zw: bool) -> None:
+    def __init__(self, ip: str, port: int) -> None:
         try:
             from pythonosc import dispatcher as osc_dispatcher  # type: ignore
             from pythonosc import osc_server  # type: ignore
@@ -399,8 +394,6 @@ class VmcReceiver:
         self._bones_raw_xyzw: Dict[str, Tuple[np.ndarray, np.ndarray]] = {}
         self._last_ts: float = 0.0
         self._seq: int = 0
-        self._invert_zw = bool(invert_zw)
-
         disp = osc_dispatcher.Dispatcher()
         disp.map("/VMC/Ext/Bone/Pos", self._on_bone_pos)
         self._server = osc_server.ThreadingOSCUDPServer((str(ip), int(port)), disp)
@@ -411,10 +404,7 @@ class VmcReceiver:
         ts = time.time()
         pos = np.array([float(px), float(py), float(pz)], dtype=np.float32)
         qx, qy, qz, qw = float(qx), float(qy), float(qz), float(qw)
-        quat = _vmc_quat_xyzw_to_wxyz(qx, qy, qz, qw, invert_zw=self._invert_zw)
-        if self._invert_zw:
-            qz = -qz
-            qw = -qw
+        quat = _vmc_quat_xyzw_to_wxyz(qx, qy, qz, qw)
         quat_raw = np.array([qx, qy, qz, qw], dtype=np.float32)
         key = _normalize_vmc_name(name)
         with self._lock:
@@ -463,6 +453,15 @@ def _parse_bone_axis_override(s: str) -> Dict[str, Dict[str, Any]]:
                 cfg["mirror_z"] = ("z" in flips)
         out[str(bone).strip()] = cfg
     return out
+
+
+_DEFAULT_VIEWER_BONE_AXIS_OVERRIDE_STR = (
+    "Hips:flip=yz;Spine:flip=yz;Spine1:flip=yz;Neck:flip=yz;Head:flip=yz;"
+    "LeftUpperArm:flip=x;RightUpperArm:flip=x;LeftLowerArm:flip=x;RightLowerArm:flip=x;"
+    "LeftHand:flip=x;RightHand:flip=x;LeftUpperLeg:flip=x;RightUpperLeg:flip=x;"
+    "LeftLowerLeg:flip=x;RightLowerLeg:flip=x;LeftFoot:flip=x;RightFoot:flip=x"
+)
+_DEFAULT_VIEWER_BONE_AXIS_OVERRIDE = _parse_bone_axis_override(_DEFAULT_VIEWER_BONE_AXIS_OVERRIDE_STR)
 
 
 def _build_bvh_to_vmc_map() -> Dict[str, str]:
@@ -532,7 +531,6 @@ class SlimevrBodyReader:
             self._receiver = VmcReceiver(
                 ip=str(self.cfg.vmc_ip),
                 port=int(self.cfg.vmc_port),
-                invert_zw=bool(self.cfg.vmc_invert_zw),
             )
         else:
             self._receiver = None
@@ -542,10 +540,35 @@ class SlimevrBodyReader:
         if bool(self.cfg.vmc_use_viewer_fk):
             from deploy_real import vmc_fk_viewer as vmc_viewer  # type: ignore
 
+            # skeleton topology/offsets from vmc_bvh_path (scaled by vmc_bvh_scale).
+            if str(self.cfg.vmc_fk_skeleton).lower() == "bvh":
+                bvh_parents, bvh_offsets = _parse_bvh_offsets(str(self.cfg.vmc_bvh_path))
+                vmc_viewer.STD_SKELETON = {}
+                for name, parent in bvh_parents.items():
+                    off = bvh_offsets.get(name, np.array([0.0, 0.0, 0.0], dtype=np.float32))
+                    vmc_viewer.STD_SKELETON[name] = (
+                        parent,
+                        (
+                            float(off[0]) * float(self.cfg.vmc_bvh_scale),
+                            float(off[1]) * float(self.cfg.vmc_bvh_scale),
+                            float(off[2]) * float(self.cfg.vmc_bvh_scale),
+                        ),
+                    )
+            elif hasattr(vmc_viewer, "STD_SKELETON_BASE"):
+                vmc_viewer.STD_SKELETON = dict(vmc_viewer.STD_SKELETON_BASE)
+
             self._viewer_fk = vmc_viewer.VMCFKReceiver(str(self.cfg.vmc_ip), int(self.cfg.vmc_port))
+            # Rebuild name mapping/rotation cache to match the (possibly replaced) skeleton.
+            self._viewer_fk.raw_rots = {}
+            self._viewer_fk.name_map = {}
+            for bone in vmc_viewer.STD_SKELETON:
+                self._viewer_fk.raw_rots[bone] = np.array([0.0, 0.0, 0.0, 1.0])
+            vmc_to_bvh = vmc_viewer._build_vmc_to_bvh_map(set(vmc_viewer.STD_SKELETON.keys()))
+            for vmc_name, bvh_name in vmc_to_bvh.items():
+                self._viewer_fk.name_map[vmc_viewer._normalize_name(vmc_name)] = bvh_name
             self._viewer_fk.rot_mode = str(self.cfg.vmc_rot_mode)
-            self._viewer_fk.invert_vmc_zw = bool(self.cfg.vmc_invert_zw)
-            self._viewer_fk.bone_axis_override = _parse_bone_axis_override(str(self.cfg.vmc_viewer_bone_axis_override))
+            # Keep viewer-axis corrections identical to the previous teleop default config.
+            self._viewer_fk.bone_axis_override = {k: dict(v) for k, v in _DEFAULT_VIEWER_BONE_AXIS_OVERRIDE.items()}
             self._viewer_fk.start()
         self._initialized = True
 

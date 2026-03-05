@@ -111,10 +111,10 @@ Main YAML:
 
 Config Structure:
 
-- `runtime`: loop settings like `target_fps`, `measure_fps`, `print_every`, `max_steps`, `dry_run`
+- `runtime`: loop settings like `target_fps`, `print_every`, `max_steps`
 - `network`: redis + mocap transport (`network.redis`, `network.mocap.default/body/hand`)
-- `retarget`: retarget/ramp/smoothing settings
-- `control`: keyboard and hand-control toggles
+- `retarget`: retarget core settings (`actual_human_height`, `hands`, `format`, `offset_to_ground`)
+- `control`: runtime control settings (`safe_idle_pose_id`, `ramp_*_seconds`, `ramp_ease`)
 - `adapters`: source-specific settings (`vdmocap`, `vdhand`, `manus`, `slimevr`)
 - `policy`: policy-specific settings (`policy.sonic`, `policy.twist2`)
 

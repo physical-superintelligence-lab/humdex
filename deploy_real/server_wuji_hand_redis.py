@@ -173,9 +173,6 @@ class WujiHandRedisController:
         clamp_min: float = -1.5,
         clamp_max: float = 1.5,
         max_delta_per_step: float = 0.08,
-        pinch_project_ratio: float = 0.2,
-        pinch_escape_ratio: float = 0.3,
-        disable_dexpilot_projection: bool = False,
         config_path: Optional[str] = None,
     ):
         """
@@ -203,10 +200,6 @@ class WujiHandRedisController:
         self.clamp_min = float(clamp_min)
         self.clamp_max = float(clamp_max)
         self.max_delta_per_step = float(max_delta_per_step)
-
-        self.pinch_project_ratio = float(pinch_project_ratio)
-        self.pinch_escape_ratio = float(pinch_escape_ratio)
-        self.disable_dexpilot_projection = bool(disable_dexpilot_projection)
         self.config_path = config_path
         
         # Redis connection
@@ -283,25 +276,6 @@ class WujiHandRedisController:
                 raise FileNotFoundError(f"Retarget YAML not found: {cfg}")
             print(f"[INFO] Loading retargeter ({self.hand_side}) with config: {cfg}")
             self.retargeter = Retargeter.from_yaml(str(cfg), hand_side=self.hand_side)
-            # Optional: tune / disable DexPilot-like projection thresholds (if optimizer supports these attrs)
-            try:
-                opt = getattr(self.retargeter, "optimizer", None)
-                if opt is not None:
-                    if self.disable_dexpilot_projection:
-                        # Make projection never trigger: dist < 0 is impossible; also turn off adaptive thresholding.
-                        if hasattr(opt, "project_dist"):
-                            opt.project_dist = 0.0
-                        if hasattr(opt, "escape_dist"):
-                            opt.escape_dist = 0.0
-                    else:
-                        # NOTE: wuji_retargeting uses fixed project_dist/escape_dist (no hand_scale adaptive logic).
-                        # If you need "easier pinch", increase these distances directly.
-                        if hasattr(opt, "project_dist"):
-                            opt.project_dist = float(self.pinch_project_ratio)  # kept for backward CLI; treat as meters
-                        if hasattr(opt, "escape_dist"):
-                            opt.escape_dist = float(self.pinch_escape_ratio)    # kept for backward CLI; treat as meters
-            except Exception:
-                pass
             print("[OK] Retargeter initialized.")
 
             # Precompute joint reordering for hardware command (wujihandpy expects 5x4 in finger order).
@@ -722,25 +696,6 @@ Examples:
     parser.add_argument("--clamp_max", type=float, default=1.5, help="Maximum clamp value for model output (--use_model)")
     parser.add_argument("--max_delta_per_step", type=float, default=0.08, help="Maximum per-step delta for model output (--use_model)")
 
-    # Pinch tuning (DexPilot projection thresholds)
-    parser.add_argument(
-        "--pinch_project_ratio",
-        type=float,
-        default=0.02,
-        help="DexPilot pinch project_dist threshold (meters, default: 0.02)",
-    )
-    parser.add_argument(
-        "--pinch_escape_ratio",
-        type=float,
-        default=0.03,
-        help="DexPilot pinch escape_dist threshold (meters, default: 0.03)",
-    )
-    parser.add_argument(
-        "--disable_dexpilot_projection",
-        action="store_true",
-        help="Disable DexPilot pinch projection logic (projected_* flags)",
-    )
-    
     return parser.parse_args()
 
 
@@ -800,9 +755,6 @@ def main():
             clamp_min=args.clamp_min,
             clamp_max=args.clamp_max,
             max_delta_per_step=args.max_delta_per_step,
-            pinch_project_ratio=args.pinch_project_ratio,
-            pinch_escape_ratio=args.pinch_escape_ratio,
-            disable_dexpilot_projection=args.disable_dexpilot_projection,
             config_path=selected_config,
         )
         controller.run()
