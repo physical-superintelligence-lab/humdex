@@ -70,7 +70,7 @@ Then follow the official [doc](https://nvlabs.github.io/GR00T-WholeBodyControl/)
 
 ## Teleop
 
-For a concise end-to-end setup flow, see `doc/teleop.md`.
+For a concise end-to-end setup flow, see [`doc/TELEOP.md`](doc/TELEOP.md).
 
 ### 1) Unified Entry
 
@@ -171,7 +171,7 @@ bash deploy.sh real --input-type zmq
 
 ## Wuji Hand Controller
 
-For Wuji device setup details, see `doc/wuji.md`.
+For Wuji device setup details, see [`doc/wuji.md`](doc/wuji.md).
 
 ### 1) Sim Hand Controller
 
@@ -260,7 +260,7 @@ Checkpoint location:
 
 ## Data Collection
 
-For robot/human recording workflow and saved data layout, see `doc/DATA_COLLECTION.md`.
+For robot/human recording workflow and saved data layout, see [`doc/DATA_COLLECTION.md`](doc/DATA_COLLECTION.md).
 
 ### 1) Start Camera Stream on g1
 

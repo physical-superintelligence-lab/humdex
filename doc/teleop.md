@@ -6,16 +6,16 @@ This document describes a practical teleoperation startup flow using the scripts
 
 Set up your body/hand tracking stack based on your hardware combination:
 
-- VDMocap/VDHand: see `doc/vdmocap_vdhand.md`
-- SlimeVR: see `doc/slimevr.md`
-- MANUS: see `doc/manus.md`
+- VDMocap/VDHand: see [`vdmocap_vdhand.md`](vdmocap_vdhand.md)
+- SlimeVR: see [`slimevr.md`](slimevr.md)
+- MANUS: see [`manus.md`](manus.md)
 
 After device setup is complete, choose the teleop combination in `teleop.sh` (`policy`, `body`, and `hand` selectors).
 
 
 ## 2. Start the G1 Controller
 
-Follow `doc/g1.md` first for robot-side preparation.
+Follow [`g1.md`](g1.md) first for robot-side preparation.
 
 ### 2.1 Sim Controller
 
@@ -55,7 +55,7 @@ bash deploy.sh real --input-type zmq
 
 ## 3. Start the Wuji Hand Controller
 
-Follow `doc/wuji.md` first for wuji hand setup.
+Follow [`wuji.md`](wuji.md) first for wuji hand setup.
 
 ### 3.1 Sim Hand Controller
 

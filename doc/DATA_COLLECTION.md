@@ -32,7 +32,7 @@ bash realsense_zmq_pub_g1.sh
 
 ### 1.2 Start Teleop
 
-Start teleoperation first, following `doc/teleop.md`.
+Start teleoperation first, following [`TELEOP.md`](TELEOP.md).
 
 ### 1.3 Start Robot Data Recording
 
@@ -57,7 +57,7 @@ Plug the RealSense USB into the workstation, then wear the RealSense using:
 
 ### 2.2 Start Teleop
 
-Start teleoperation first, following `doc/teleop.md`.
+Start teleoperation first, following [`TELEOP.md`](TELEOP.md).
 
 ### 2.3 Start Human Data Recording
 
