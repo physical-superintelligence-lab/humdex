@@ -100,4 +100,13 @@ bash teleop.sh --policy sonic --body vdmocap --hand manus
 bash teleop.sh --policy twist2 --body slimevr --hand vdhand
 ```
 
+Keyboard controls during teleop:
+
+- `k`: toggle between **send mode** and **default mode**.
+  - send mode: live retargeted commands are sent to the robot.
+  - default mode: the robot returns to (or stays at) the configured safe default pose.
+- `p`: toggle **hold mode**.
+  - hold mode on: freeze at the current command/pose and stop following new incoming teleop motion.
+  - hold mode off: resume normal live following.
+
 Make sure your tracker setup and teleop selectors match the same data sources.

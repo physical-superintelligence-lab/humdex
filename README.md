@@ -68,75 +68,9 @@ Then follow the official [doc](https://nvlabs.github.io/GR00T-WholeBodyControl/)
 
 ---
 
-## Wuji Policy
-
-### 1) Install
-
-```bash
-conda activate humdex
-cd wuji_policy
-pip install -r requirements.txt
-pip install -e .
-```
-
-### 2) Train (supervised)
-
-Data format (`.npz`) used by `wuji_policy/geort/trainer.py`:
-- required key: `fingertips_rel_wrist` with shape `[T, 5, 3]` (or `[T, 5, >=3]`)
-- supervision key: `qpos` (recommended), or `robot_qpos`, `joint`, `joint_angle`, `joint_angles`
-
-Example:
-
-```bash
-cd wuji_policy
-python geort/trainer.py \
-  -hand wuji_right \
-  -human_data wuji_right \
-  -ckpt_tag geort_wuji \
-  --qpos_key qpos \
-  --n_samples 20000 \
-  --batch_size 2048 \
-  --lr 1e-4 \
-  --save_every 10 \
-  --ckpt_root ./checkpoint
-```
-
-For left hand, replace `wuji_right` with `wuji_left`.
-
-### 3) Inference (model-based vs optimal-based)
-
-Both `wuji_policy/server_wuji_hand_redis.py` and `wuji_policy/deploy2.py` support:
-- `--use_model`: model-based (GeoRT)
-- default (without it): optimal-based (`WujiHandRetargeter`)
-
-You can override alias by setting `--policy_tag`.
-
-Example (model-based):
-
-```bash
-cd wuji_policy
-python server_wuji_hand_redis.py \
-  --hand_side right \
-  --use_model \
-  --checkpoint right_last \
-  --policy_epoch -1
-```
-
-Example (optimal-based):
-
-```bash
-cd wuji_policy
-python server_wuji_hand_redis.py \
-  --hand_side right
-```
-
-Checkpoint location:
-- `wuji_policy/checkpoint/<your_tag_or_run_name>/`
-- each checkpoint folder should contain at least `config.json` and `last.pth` (or `epoch_*.pth`)
-
----
-
 ## Teleop
+
+For a concise end-to-end setup flow, see `doc/teleop.md`.
 
 ### 1) Unified Entry
 
@@ -237,6 +171,8 @@ bash deploy.sh real --input-type zmq
 
 ## Wuji Hand Controller
 
+For Wuji device setup details, see `doc/wuji.md`.
+
 ### 1) Sim Hand Controller
 
 ```bash
@@ -253,7 +189,78 @@ bash wuji_hand_real.sh
 
 ---
 
+## Wuji Policy
+
+### 1) Install
+
+```bash
+conda activate humdex
+cd wuji_policy
+pip install -r requirements.txt
+pip install -e .
+```
+
+### 2) Train (supervised)
+
+Data format (`.npz`) used by `wuji_policy/geort/trainer.py`:
+- required key: `fingertips_rel_wrist` with shape `[T, 5, 3]` (or `[T, 5, >=3]`)
+- supervision key: `qpos` (recommended), or `robot_qpos`, `joint`, `joint_angle`, `joint_angles`
+
+Example:
+
+```bash
+cd wuji_policy
+python geort/trainer.py \
+  -hand wuji_right \
+  -human_data wuji_right \
+  -ckpt_tag geort_wuji \
+  --qpos_key qpos \
+  --n_samples 20000 \
+  --batch_size 2048 \
+  --lr 1e-4 \
+  --save_every 10 \
+  --ckpt_root ./checkpoint
+```
+
+For left hand, replace `wuji_right` with `wuji_left`.
+
+### 3) Inference (model-based vs optimal-based)
+
+Both `wuji_policy/server_wuji_hand_redis.py` and `wuji_policy/deploy2.py` support:
+- `--use_model`: model-based (GeoRT)
+- default (without it): optimal-based (`WujiHandRetargeter`)
+
+You can override alias by setting `--policy_tag`.
+
+Example (model-based):
+
+```bash
+cd wuji_policy
+python server_wuji_hand_redis.py \
+  --hand_side right \
+  --use_model \
+  --checkpoint right_last \
+  --policy_epoch -1
+```
+
+Example (optimal-based):
+
+```bash
+cd wuji_policy
+python server_wuji_hand_redis.py \
+  --hand_side right
+```
+
+Checkpoint location:
+- `wuji_policy/checkpoint/<your_tag_or_run_name>/`
+- each checkpoint folder should contain at least `config.json` and `last.pth` (or `epoch_*.pth`)
+
+---
+
+
 ## Data Collection
+
+For robot/human recording workflow and saved data layout, see `doc/DATA_COLLECTION.md`.
 
 ### 1) Start Camera Stream on g1
 
