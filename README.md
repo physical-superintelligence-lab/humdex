@@ -109,10 +109,6 @@ Both `wuji_policy/server_wuji_hand_redis.py` and `wuji_policy/deploy2.py` suppor
 - `--use_model`: model-based (GeoRT)
 - default (without it): optimal-based (`WujiHandRetargeter`)
 
-Built-in checkpoint aliases:
-- `--checkpoint filter` -> `geort_filter_wuji`
-- `--checkpoint filter_v2` -> `geort_filter_wuji_2`
-
 You can override alias by setting `--policy_tag`.
 
 Example (model-based):
@@ -120,9 +116,9 @@ Example (model-based):
 ```bash
 cd wuji_policy
 python server_wuji_hand_redis.py \
-  --hand_side left \
+  --hand_side right \
   --use_model \
-  --checkpoint filter \
+  --checkpoint right_last \
   --policy_epoch -1
 ```
 
@@ -131,7 +127,7 @@ Example (optimal-based):
 ```bash
 cd wuji_policy
 python server_wuji_hand_redis.py \
-  --hand_side left
+  --hand_side right
 ```
 
 Checkpoint location:
