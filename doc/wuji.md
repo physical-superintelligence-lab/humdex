@@ -34,7 +34,6 @@ lsusb -v -d 0483:2000 | grep iSerial
 
 Then set `hand_side` and `serial_number` in `wuji_hand_real.sh` before starting the controller.
 
----
 
 ## More Information
 
