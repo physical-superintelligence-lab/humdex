@@ -5,11 +5,6 @@ RealSense -> JPEG -> ZeroMQ PUB server.
 This server publishes messages compatible with deploy_real/data_utils/vision_client.py (VisionClient):
 Message format (bytes):
     [int32 width][int32 height][int32 jpeg_length][jpeg_bytes]
-
-Typical usage on g1:
-  source ~/miniconda3/bin/activate twist2
-  cd ~/TWIST2/deploy_real
-  python server_realsense_zmq_pub.py --bind 0.0.0.0 --port 5555 --width 640 --height 480 --fps 30
 """
 
 import argparse

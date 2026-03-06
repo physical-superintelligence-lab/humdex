@@ -2,9 +2,9 @@
 set -euo pipefail
 
 
-HOST="${HOST:-g1}"
+HOST="${HOST:-unitree@192.168.123.164}"
 REMOTE_DIR="${REMOTE_DIR:-~}"
-CONDA_ENV="${CONDA_ENV:-g1}"
+CONDA_ENV="${CONDA_ENV:-realsense}"
 
 PY_ARGS=(--bind 0.0.0.0 --port 5555 --width 640 --height 480 --fps 30 --jpeg_quality 80)
 REST_ARGS=()
@@ -15,7 +15,7 @@ while [[ $# -gt 0 ]]; do
     --remote_dir) REMOTE_DIR="$2"; shift 2;;
     --conda_env) CONDA_ENV="$2"; shift 2;;
     -h|--help)
-      echo "usage: $0 [--host g1] [--remote_dir ~/TWIST2] [--conda_env twist2] [server_realsense_zmq_pub.py args...]"
+      echo "usage: $0 [--host unitree@192.168.123.164] [--remote_dir ~] [--conda_env realsense] [server_realsense_zmq_pub.py args...]"
       exit 0
       ;;
     *)
@@ -28,10 +28,10 @@ done
 REMOTE_CMD=$(cat <<'EOF'
 set -euo pipefail
 source ~/miniconda3/bin/activate "__CONDA_ENV__"
-cd "__REMOTE_DIR__/deploy_real"
+cd "__REMOTE_DIR__"
 sudo killall -9 videohub_pc4 >/dev/null 2>&1 || true
 sleep 0.1
-exec /usr/bin/python3 server_realsense_zmq_pub.py __PY_ARGS__
+exec /usr/bin/python3 ./server_realsense_zmq_pub.py __PY_ARGS__
 EOF
 )
 

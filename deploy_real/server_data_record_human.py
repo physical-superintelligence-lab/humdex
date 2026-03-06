@@ -320,7 +320,7 @@ class RealSenseVisionSource:
 def parse_args() -> argparse.Namespace:
     cur_time = datetime.now().strftime("%Y%m%d_%H%M")
     here = os.path.dirname(os.path.abspath(__file__))
-    default_data_folder = os.path.join(here, "twist2_demonstration")
+    default_data_folder = os.path.join(here, "humdex_demonstration")
 
     p = argparse.ArgumentParser(description="VDMocap/Redis + RealSense recorder (record-only, no robot/hand control)")
 
@@ -418,9 +418,6 @@ def parse_args() -> argparse.Namespace:
 def build_redis_key_candidates(channel: str, suffix: str, *, body_from_redis: bool = True) -> List[tuple[str, List[str]]]:
     base: List[tuple[str, List[str]]] = [
         ("state_body", [f"state_body_{suffix}"]) if body_from_redis else ("state_body", []),
-        ("state_hand_left", [f"state_hand_left_{suffix}"]),
-        ("state_hand_right", [f"state_hand_right_{suffix}"]),
-        ("state_neck", [f"state_neck_{suffix}"]) if body_from_redis else ("state_neck", []),
         ("t_state", ["t_state"]) if body_from_redis else ("t_state", []),
         ("action_body", [f"action_body_{suffix}"]) if body_from_redis else ("action_body", []),
         ("t_action", ["t_action"]),
