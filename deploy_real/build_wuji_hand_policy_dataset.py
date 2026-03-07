@@ -2,7 +2,7 @@
 """
 离线构建 Wuji 灵巧手 policy 训练数据集：
 
-从 deploy_real/twist2_demonstration/**/episode_*/data.json 读取每帧：
+从 deploy_real/humdex demonstration/**/episode_*/data.json 读取每帧：
 - action_wuji_qpos_target_{left/right} (20维，Wuji手关节目标)
 - hand_tracking_{left/right} (26D tracker dict)
 
@@ -58,19 +58,24 @@ FINGERTIP_INDICES: List[int] = [4, 8, 12, 16, 20]
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    # .../HumDex/deploy_real/build_wuji_hand_policy_dataset.py -> .../HumDex
+    return Path(__file__).resolve().parents[1]
 
 
 def _ensure_wuji_retargeting_on_path() -> None:
     """
-    与 deploy_real/server_wuji_hand_redis.py 的做法一致：把仓库内的 wuji_retargeting 加到 sys.path。
+    与 deploy_real/server_wuji_hand_redis.py 的做法一致：
+    把仓库内的 wuji-retargeting 或 legacy wuji_retargeting 加到 sys.path。
     """
     import sys
 
     project_root = _repo_root()
-    wuji_retargeting_path = project_root / "wuji_retargeting"
-    if str(wuji_retargeting_path) not in sys.path:
-        sys.path.insert(0, str(wuji_retargeting_path))
+    for wuji_retargeting_path in [
+        project_root / "wuji-retargeting",
+        project_root / "wuji_retargeting",
+    ]:
+        if wuji_retargeting_path.exists() and str(wuji_retargeting_path) not in sys.path:
+            sys.path.insert(0, str(wuji_retargeting_path))
 
 # ---- 26D -> 21D 转换（与 deploy_real/server_wuji_hand_redis.py 保持一致，避免依赖 deploy_real 作为包导入）----
 HAND_JOINT_NAMES_26: List[str] = [
@@ -212,6 +217,7 @@ def _build_one_episode_side(
     tips_all: List[np.ndarray] = []
     idx_all: List[int] = []
     ts_all: List[int] = []
+    dropped_non_finite = 0
 
     for fr in frames:
         action = fr.get(k_action, None)
@@ -241,6 +247,10 @@ def _build_one_episode_side(
             continue
 
         tips = mp21_t[FINGERTIP_INDICES, :].copy()  # (5,3)，wrist 已为零点
+        # 关键防护：过滤 NaN/Inf，避免训练时 loss 变成 nan
+        if (not np.isfinite(a).all()) or (not np.isfinite(mp21_t).all()) or (not np.isfinite(tips).all()):
+            dropped_non_finite += 1
+            continue
 
         actions.append(a)
         mp21_all.append(mp21_t)
@@ -252,6 +262,9 @@ def _build_one_episode_side(
         if ts is None and isinstance(tracking, dict):
             ts = tracking.get("timestamp", None)
         ts_all.append(int(ts) if ts is not None else -1)
+
+    if dropped_non_finite > 0:
+        print(f"[INFO] [{side}] 过滤非有限值帧: {dropped_non_finite}")
 
     if len(actions) == 0:
         return (
@@ -282,8 +295,8 @@ def main() -> int:
     parser.add_argument(
         "--input_root",
         type=str,
-        default=str(_repo_root() / "deploy_real" / "twist2_demonstration"),
-        help="twist2_demonstration 根目录",
+        default=str(_repo_root() / "deploy_real" / "humdex demonstration"),
+        help="humdex demonstration 根目录",
     )
     parser.add_argument(
         "--output_root",
@@ -308,14 +321,22 @@ def main() -> int:
 
     def _load_apply_mediapipe_transformations():
         """
-        只加载 wuji_retargeting/wuji_retargeting/mediapipe.py，避免 import wuji_retargeting 触发 pinocchio 依赖。
+        只加载 wuji_retargeting/wuji_retargeting/mediapipe.py，避免 import 整包触发 pinocchio 依赖。
         """
         import importlib.util
 
         repo_root = _repo_root()
-        mediapipe_py = repo_root / "wuji_retargeting" / "wuji_retargeting" / "mediapipe.py"
-        if not mediapipe_py.exists():
-            raise FileNotFoundError(f"找不到: {mediapipe_py}")
+        candidates = [
+            repo_root / "wuji-retargeting" / "wuji_retargeting" / "mediapipe.py",
+            repo_root / "wuji_retargeting" / "wuji_retargeting" / "mediapipe.py",
+        ]
+        mediapipe_py = None
+        for cand in candidates:
+            if cand.exists():
+                mediapipe_py = cand
+                break
+        if mediapipe_py is None:
+            raise FileNotFoundError("找不到 mediapipe.py，请检查 wuji-retargeting 路径。")
 
         spec = importlib.util.spec_from_file_location("_wuji_retargeting_mediapipe", str(mediapipe_py))
         if spec is None or spec.loader is None:
