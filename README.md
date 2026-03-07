@@ -68,6 +68,105 @@ Then follow the official [doc](https://nvlabs.github.io/GR00T-WholeBodyControl/)
 
 ---
 
+<<<<<<< Updated upstream
+=======
+## Wuji Policy
+
+### 1) Install
+
+```bash
+conda activate humdex
+cd wuji_policy
+pip install -r requirements.txt
+pip install -e .
+```
+
+### 2) Train (supervised)
+
+Data format (`.npz`) used by `wuji_policy/geort/trainer.py`:
+- required key: `fingertips_rel_wrist` with shape `[T, 5, 3]` (or `[T, 5, >=3]`)
+- supervision key: `qpos` (recommended), or `robot_qpos`, `joint`, `joint_angle`, `joint_angles`
+
+If your raw collection files are not in this format yet, first run:
+
+```bash
+conda activate humdex
+cd deploy_real
+python wuji_data_collect.py --input_path /home/jiajunxu/projects/humanoid_tele/data/collect
+```
+
+This will generate:
+- `HumDex/wuji_policy/data/collect.npz`
+
+You can also pass a single input file:
+
+```bash
+python wuji_data_collect.py --input_path /path/to/raw_xxx.npz
+```
+
+which outputs:
+- `HumDex/wuji_policy/data/raw_xxx.npz`
+
+If needed, set a custom output name:
+
+```bash
+python wuji_data_collect.py --input_path /path/to/raw_dir --output_name wuji_left
+```
+
+Example:
+
+```bash
+cd wuji_policy
+python geort/trainer.py \
+  -hand wuji_right \
+  -human_data wuji_right \
+  -ckpt_tag geort_wuji \
+  --qpos_key qpos \
+  --n_samples 20000 \
+  --batch_size 2048 \
+  --lr 1e-4 \
+  --save_every 10 \
+  --ckpt_root ./checkpoint
+```
+
+`-human_data` should match the output npz stem in `wuji_policy/data` (e.g., `collect` for `collect.npz`, `wuji_left` for `wuji_left.npz`).
+
+For left hand, replace `wuji_right` with `wuji_left`.
+
+### 3) Inference (model-based vs optimal-based)
+
+Both `wuji_policy/server_wuji_hand_redis.py` and `wuji_policy/deploy2.py` support:
+- `--use_model`: model-based (GeoRT)
+- default (without it): optimal-based (`WujiHandRetargeter`)
+
+You can override alias by setting `--policy_tag`.
+
+Example (model-based):
+
+```bash
+cd wuji_policy
+python server_wuji_hand_redis.py \
+  --hand_side right \
+  --use_model \
+  --checkpoint right_last \
+  --policy_epoch -1
+```
+
+Example (optimal-based):
+
+```bash
+cd wuji_policy
+python server_wuji_hand_redis.py \
+  --hand_side right
+```
+
+Checkpoint location:
+- `wuji_policy/checkpoint/<your_tag_or_run_name>/`
+- each checkpoint folder should contain at least `config.json` and `last.pth` (or `epoch_*.pth`)
+
+---
+
+>>>>>>> Stashed changes
 ## Teleop
 
 For a concise end-to-end setup flow, see [`doc/teleop.md`](doc/teleop.md).
