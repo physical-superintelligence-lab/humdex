@@ -91,9 +91,10 @@ If your raw collection files are not in this format yet, first run:
 
 ```bash
 conda activate humdex
-cd deploy_real
-python wuji_data_collect.py --input_path /home/jiajunxu/projects/humanoid_tele/data/collect
+bash wuji_data_collect.sh
 ```
+
+By default, `wuji_data_collect.sh` reads from `deploy_real/humdex_demonstration`, which is the default output root used by `data_record.sh`.
 
 This will generate:
 - `HumDex/wuji_policy/data/collect.npz`
@@ -110,7 +111,7 @@ which outputs:
 If needed, set a custom output name:
 
 ```bash
-python wuji_data_collect.py --input_path /path/to/raw_dir --output_name wuji_left
+bash wuji_data_collect.sh --input_path /path/to/raw_dir --output_name wuji_left
 ```
 
 Example:
