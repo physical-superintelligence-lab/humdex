@@ -15,6 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 DATA_ROOT="${REPO_ROOT}/deploy_real/humdex demonstration"
+DEFAULT_SESSION="20260306_2310_twist2_left"
 HAND_SIDE="${2:-left}"
 OUTPUT_NAME="${3:-wuji_${HAND_SIDE}}"
 OUTPUT_DIR="${REPO_ROOT}/wuji_policy/data"
@@ -22,7 +23,7 @@ OUTPUT_DIR="${REPO_ROOT}/wuji_policy/data"
 if [[ $# -ge 1 && -n "${1:-}" ]]; then
   INPUT_ROOT="${DATA_ROOT}/$1"
 else
-  INPUT_ROOT="${DATA_ROOT}"
+  INPUT_ROOT="${DATA_ROOT}/${DEFAULT_SESSION}"
 fi
 
 if [[ ! -d "${DATA_ROOT}" ]]; then
