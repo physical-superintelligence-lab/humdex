@@ -14,7 +14,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-DATA_ROOT="${REPO_ROOT}/deploy_real/humdex demonstration"
+DATA_ROOT="${REPO_ROOT}/deploy_real/humdex_demonstration"
 DEFAULT_SESSION="20260306_2310_twist2_left"
 HAND_SIDE="${2:-left}"
 OUTPUT_NAME="${3:-wuji_${HAND_SIDE}}"
