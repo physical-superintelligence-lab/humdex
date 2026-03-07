@@ -31,7 +31,7 @@ cd GMR
 pip install -e .
 cd ..
 
-pip install python-osc
+pip install python-osc zmq
 
 conda install -c conda-forge libstdcxx-ng -y
 ```
