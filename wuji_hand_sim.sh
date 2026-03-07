@@ -11,7 +11,7 @@ policy_tag="geort_filter_wuji"
 policy_epoch=-1
 
 # Start controller
-python server_wuji_hand_sim_redis.py \
+python ../deploy_real/server_wuji_hand_sim_redis.py \
     --hand_side ${hand_side} \
     --config ${retarget_config} \
     --redis_ip ${redis_ip} \
@@ -19,4 +19,4 @@ python server_wuji_hand_sim_redis.py \
     --no_smooth \
     --use_model \
     --policy_tag ${policy_tag} \
-    --policy_epoch ${policy_epoch} \
+    --policy_epoch ${policy_epoch}

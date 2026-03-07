@@ -10,7 +10,7 @@ policy_tag="wuji_left_new_1"
 policy_epoch=200
 
 # Start controller
-python ../wuji_policy/server_wuji_hand_redis.py \
+python ../deploy_real/server_wuji_hand_redis.py \
     --hand_side ${hand_side} \
     --serial_number ${serial_number} \
     --redis_ip ${redis_ip} \

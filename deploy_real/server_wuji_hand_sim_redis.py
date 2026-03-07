@@ -280,12 +280,12 @@ class WujiHandSimRedisViz:
         if self.use_model:
             # GeoRT model inference (same API as deploy2.py)
             try:
-                wuji_retarget_path = project_root / "wuji_retarget"
+                wuji_retarget_path = project_root / "wuji_policy"
                 if str(wuji_retarget_path) not in sys.path:
                     sys.path.insert(0, str(wuji_retarget_path))
                 import geort  # type: ignore
             except Exception as e:
-                raise RuntimeError(f"Cannot import geort (wuji_retarget/ must be on PYTHONPATH). Error: {e}") from e
+                raise RuntimeError(f"Cannot import geort (wuji_policy/ must be on PYTHONPATH). Error: {e}") from e
 
             print(f"[WujiHandSim] [INFO] load GeoRT model: tag={self.policy_tag}, epoch={self.policy_epoch}")
             self.model_infer = geort.load_model(self.policy_tag, epoch=self.policy_epoch)

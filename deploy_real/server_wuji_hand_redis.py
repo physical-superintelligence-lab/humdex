@@ -39,7 +39,7 @@ for _p in [WUJI_RETARGETING_V2_PATH, WUJI_RETARGETING_LEGACY_PATH]:
         sys.path.insert(0, str(_p))
 
 # Keep `wuji_retarget` importable for GeoRT model mode.
-WUJI_RETARGET_PATH = PROJECT_ROOT / "wuji_retarget"
+WUJI_RETARGET_PATH = PROJECT_ROOT / "wuji_policy"
 if str(WUJI_RETARGET_PATH) not in sys.path:
     sys.path.insert(0, str(WUJI_RETARGET_PATH))
 
@@ -257,7 +257,7 @@ class WujiHandRedisController:
                 import geort  # type: ignore
             except Exception as e:
                 raise ImportError(
-                    f"Failed to import geort (check wuji_retarget and PYTHONPATH): {e}"
+                    f"Failed to import geort (check wuji_policy and PYTHONPATH): {e}"
                 )
             self._geort = geort
             print(f"[INFO] Loading GeoRT model: tag={self.model_tag}, epoch={self.model_epoch}")
