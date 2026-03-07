@@ -247,7 +247,7 @@ source .venv_sim/bin/activate
 python gear_sonic/scripts/run_sim_loop.py
 
 # Terminal 2 — C++ deployment
-cd ../GR00T-WholeBodyControl/gear_sonic_deploys
+cd ../GR00T-WholeBodyControl/gear_sonic_deploy
 source scripts/setup_env.sh
 bash deploy.sh sim --input-type zmq
 ```
