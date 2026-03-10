@@ -91,7 +91,7 @@ Examples:
 
     # Verify XML exists
     if not Path(hand_xml).exists():
-        print(f"[ERROR] XML file not found: {hand_xml}")
+        print(f"❌ Error: XML file not found: {hand_xml}")
         print("\nPlease specify --xml <path> or ensure the file exists")
         return 1
 

@@ -9,9 +9,9 @@ This script processes episode data to align states with previous actions:
 - Reindex images accordingly
 
 State-Action pairs processed:
-- state_body  action_body (extracted to 31D: [3:5] + [6:35])
-- state_wuji_hand_left  action_wuji_qpos_target_left (20D)
-- state_wuji_hand_right  action_wuji_qpos_target_right (20D)
+- state_body ← action_body (extracted to 31D: [3:5] + [6:35])
+- state_wuji_hand_left ← action_wuji_qpos_target_left (20D)
+- state_wuji_hand_right ← action_wuji_qpos_target_right (20D)
 
 For state_body, we extract 31 dimensions from action_body:
 - action_body[3:5] = roll, pitch (2D)
@@ -23,8 +23,7 @@ Action dimensions stay unchanged:
 - action_wuji_qpos_target_* stays 20D
 
 Usage:
-    python shift_state_action.py --dataset_dir /path/to/dataset
-    python shift_state_action.py --dataset_dir /path/to/dataset --dry_run
+    python convert_human_data.py --dataset_dir /path/to/dataset
 """
 
 import argparse
@@ -80,7 +79,6 @@ def extract_action_body_31d(action_body: Optional[List[float]]) -> Optional[List
 
 def process_single_episode(
     episode_path: Path,
-    dry_run: bool = False,
     verbose: bool = False,
     backup: bool = True
 ) -> Tuple[str, int, int, str]:
@@ -89,7 +87,6 @@ def process_single_episode(
     
     Args:
         episode_path: Path to episode folder
-        dry_run: If True, only report what would be done
         verbose: Print detailed info
         backup: If True, create data_original.json backup before modifying
         
@@ -118,10 +115,6 @@ def process_single_episode(
         
         if original_count < 3:
             return (episode_name, original_count, 0, "too few frames (need >= 3)")
-        
-        if dry_run:
-            new_count = original_count - 2
-            return (episode_name, original_count, new_count, "dry_run")
         
         # ================================================================
         # Step 0: Create backups before modifying
@@ -244,7 +237,6 @@ def find_episode_folders(dataset_dir: Path, pattern: str = "episode_*") -> List[
 
 def batch_process_dataset(
     dataset_dir: str,
-    dry_run: bool = False,
     episode_pattern: str = "episode_*",
     verbose: bool = True,
     backup: bool = True
@@ -254,7 +246,6 @@ def batch_process_dataset(
     
     Args:
         dataset_dir: Path to dataset folder
-        dry_run: If True, only check files without modifying
         episode_pattern: Glob pattern for episode folders
         verbose: Whether to print progress
         backup: If True, create backups before modifying
@@ -270,28 +261,26 @@ def batch_process_dataset(
     episodes = find_episode_folders(dataset_dir, episode_pattern)
     
     if verbose:
-        print(f"Dataset: {dataset_dir}")
-        print(f"[INFO] Found {len(episodes)} episodes")
-        if dry_run:
-            print(" Dry run mode - no files will be modified")
-        if backup and not dry_run:
-            print(" Backup enabled - will create data_original.json and rgb_original/")
+        print(f"📁 Dataset: {dataset_dir}")
+        print(f"📊 Found {len(episodes)} episodes")
+        if backup:
+            print("💾 Backup enabled - will create data_original.json and rgb_original/")
         print()
     
     if len(episodes) == 0:
-        print("[WARN] No episodes found!")
+        print("⚠️  No episodes found!")
         return {"total_episodes": 0}
     
     results = []
     
     iterator = tqdm(episodes, desc="Processing episodes") if verbose else episodes
     for episode_path in iterator:
-        result = process_single_episode(episode_path, dry_run, verbose, backup)
+        result = process_single_episode(episode_path, verbose, backup)
         results.append(result)
     
     # Compile statistics
     total_episodes = len(results)
-    successful = sum(1 for r in results if r[3] == "success" or r[3] == "dry_run")
+    successful = sum(1 for r in results if r[3] == "success")
     failed = sum(1 for r in results if r[3].startswith("error"))
     too_few = sum(1 for r in results if "too few" in r[3])
     no_data = sum(1 for r in results if r[3] == "no data.json")
@@ -319,20 +308,20 @@ def batch_process_dataset(
         print("=" * 60)
         print(f"  Episodes processed: {successful}/{total_episodes}")
         if failed > 0:
-            print(f"  [ERROR] Failed: {failed}")
+            print(f"  ❌ Failed: {failed}")
         if too_few > 0:
-            print(f"  [WARN] Too few frames: {too_few}")
+            print(f"  ⚠️  Too few frames: {too_few}")
         if no_data > 0:
-            print(f"  [WARN] No data.json: {no_data}")
+            print(f"  ⚠️  No data.json: {no_data}")
         print()
         print(f"  Original frames: {total_original_frames}")
         print(f"  New frames: {total_new_frames}")
         print(f"  Dropped frames: {total_dropped} (first + last per episode)")
         print()
         print("  Transformations applied:")
-        print("    - state_body  action_body[3:5] + action_body[6:35] (31D)")
-        print("    - state_wuji_hand_left  action_wuji_qpos_target_left (20D)")
-        print("    - state_wuji_hand_right  action_wuji_qpos_target_right (20D)")
+        print("    - state_body ← action_body[3:5] + action_body[6:35] (31D)")
+        print("    - state_wuji_hand_left ← action_wuji_qpos_target_left (20D)")
+        print("    - state_wuji_hand_right ← action_wuji_qpos_target_right (20D)")
         print("    - action_body stays original (35D)")
         print("    - action_wuji_qpos_target_* stays original (20D)")
         
@@ -366,7 +355,7 @@ Transformation logic:
       action[i] = action[i+1]  (action from original frame i+1)
 
 Dimension changes:
-  - state_body: 34D -> 31D (from action_body[3:5] + [6:35])
+  - state_body: 34D → 31D (from action_body[3:5] + [6:35])
   - action_body: stays 35D (unchanged)
 
 Examples:
@@ -375,9 +364,6 @@ Examples:
 
   # Process multiple datasets in one command
   python shift_state_action.py --dataset_dir /path/to/d1 /path/to/d2 /path/to/d3
-
-  # Dry run - check without modifying
-  python shift_state_action.py --dataset_dir /path/to/dataset --dry_run
 
   # Process without creating backups
   python shift_state_action.py --dataset_dir /path/to/dataset --no_backup
@@ -397,12 +383,6 @@ Backup files created:
         nargs="+",
         required=True,
         help="One or more dataset directories containing episode folders"
-    )
-    
-    parser.add_argument(
-        "--dry_run",
-        action="store_true",
-        help="Check files without modifying"
     )
     
     parser.add_argument(
@@ -437,8 +417,8 @@ def main():
         print("=" * 60)
         print()
         print("This will:")
-        print("  1. Backup data.json -> data_original.json" if not args.no_backup else "  1. (Backup disabled)")
-        print("  2. Backup rgb/ -> rgb_original/" if not args.no_backup else "  2. (Backup disabled)")
+        print("  1. Backup data.json → data_original.json" if not args.no_backup else "  1. (Backup disabled)")
+        print("  2. Backup rgb/ → rgb_original/" if not args.no_backup else "  2. (Backup disabled)")
         print("  3. Drop first and last frame from each episode")
         print("  4. Set state[i] = action[i-1] (shifted, state_body becomes 31D)")
         print("  5. Keep action as original dimensions (action_body stays 35D)")
@@ -452,7 +432,6 @@ def main():
     for d in dataset_dirs:
         stats = batch_process_dataset(
             dataset_dir=d,
-            dry_run=args.dry_run,
             episode_pattern=args.pattern,
             verbose=verbose,
             backup=not args.no_backup,
@@ -463,7 +442,7 @@ def main():
     
     if verbose:
         print()
-        print(f"  Total time: {elapsed:.2f}s")
+        print(f"⏱️  Total time: {elapsed:.2f}s")
         total_eps = sum(int(s.get("total_episodes", 0)) for s in all_stats)
         if total_eps > 0:
             print(f"   Average per episode: {elapsed / total_eps:.2f}s")

@@ -6,181 +6,8 @@ from torch.utils.data import TensorDataset, DataLoader
 from PIL import Image
 from io import BytesIO
 
-import IPython
-e = IPython.embed
-
-# =============================================================================
-# Relative Action Space Configuration
-# =============================================================================
-# Dimension mapping for relative actions:
-# state_body (31D) maps to specific dimensions of action_body (35D):
-#   state_body[0:2]   action_body[3:5]   (roll, pitch)
-#   state_body[2:31]  action_body[6:35]  (29 joint positions)
-# 
-# action_body dimensions NOT in state_body (kept absolute in relative mode):
-#   action_body[0:3]  - XY velocity, Z height
-#   action_body[5:6]  - unknown dimension
-#
-# Hand actions fully match between state and action:
-#   Single hand mode (hand_side="left" or "right"):
-#     state_wuji_hand (20D)  action_wuji_qpos_target (20D)
-#     action[35:55] relative to state_hand[0:20]
-#   
-#   Both hands mode (hand_side="both"):
-#     state_wuji_hand_left (20D)  action_wuji_qpos_target_left (20D)
-#     state_wuji_hand_right (20D)  action_wuji_qpos_target_right (20D)
-#     action[35:55] relative to state_hand_left[0:20]
-#     action[55:75] relative to state_hand_right[20:40]
-
 # Standard normalization threshold for statistical stability
 NORM_STD_MIN_THRESHOLD = 1e-2
-
-
-def convert_actions_to_relative(actions, qpos, state_body_dim=31):
-    """
-    Convert absolute actions to relative actions.
-    
-    Only matched dimensions are converted to relative:
-    - Body: action_body[3:5] and [6:35] -> relative to state_body
-    - Hand(s): action_hand -> relative to state_hand
-      * Single hand (20D): action[35:55] relative to state_hand[0:20]
-      * Both hands (40D): action[35:55] relative to state_hand_left[0:20],
-                          action[55:75] relative to state_hand_right[20:40]
-    - Unmatched body dims [0:3] and [5:6] remain absolute
-    
-    Args:
-        actions: (T, action_dim) or (action_dim,) - absolute actions
-                 action_dim = 55 (single hand) or 75 (both hands)
-        qpos: (state_dim,) - current state [state_body + state_hand(s)]
-              state_dim = 51 or 54 (single) or 71 or 74 (both)
-        state_body_dim: dimension of state_body (31 or 34)
-    
-    Returns:
-        actions_relative: same shape as input - relative actions
-    """
-    # Handle both batched (T, D) and single (D,) cases
-    is_batched = actions.ndim == 2 if hasattr(actions, 'ndim') else len(actions.shape) == 2
-    if not is_batched:
-        if torch.is_tensor(actions):
-            actions = actions.unsqueeze(0)
-        else:
-            actions = actions[None, :]
-    
-    # Clone/copy to avoid modifying input
-    if torch.is_tensor(actions):
-        actions_relative = actions.clone()
-    else:
-        actions_relative = np.copy(actions)
-    
-    # Extract state components
-    if torch.is_tensor(qpos):
-        state_body = qpos[:state_body_dim]
-        state_hand_all = qpos[state_body_dim:]  # 20D (single hand) or 40D (both hands)
-    else:
-        state_body = qpos[:state_body_dim]
-        state_hand_all = qpos[state_body_dim:]
-    
-    # Body: convert matching dimensions to relative (only for 31D, as we don't support 34D yet)
-    if state_body_dim == 31:
-        # action_body[3:5] (roll, pitch) - relative to state_body[0:2]
-        actions_relative[:, 3:5] = actions[:, 3:5] - state_body[0:2]
-        # action_body[6:35] (joints) - relative to state_body[2:31]
-        actions_relative[:, 6:35] = actions[:, 6:35] - state_body[2:31]
-        # action_body[0:3] and [5:6] remain absolute (unmatched dims)
-    
-    # Hand: convert all dimensions to relative (action_body is 35D, hand starts at 35)
-    hand_action_start = 35
-    hand_dim = len(state_hand_all)
-    
-    if hand_dim == 20:
-        # Single hand: action[35:55] relative to state_hand[0:20]
-        actions_relative[:, hand_action_start:hand_action_start+20] = \
-            actions[:, hand_action_start:hand_action_start+20] - state_hand_all
-    elif hand_dim == 40:
-        # Both hands: split state_hand_all into left and right
-        state_hand_left = state_hand_all[:20]
-        state_hand_right = state_hand_all[20:40]
-        # action[35:55] relative to state_hand_left
-        actions_relative[:, 35:55] = actions[:, 35:55] - state_hand_left
-        # action[55:75] relative to state_hand_right
-        actions_relative[:, 55:75] = actions[:, 55:75] - state_hand_right
-    else:
-        raise ValueError(f"Unexpected hand dimension: {hand_dim}. Expected 20 (single) or 40 (both)")
-    
-    if not is_batched:
-        if torch.is_tensor(actions_relative):
-            actions_relative = actions_relative.squeeze(0)
-        else:
-            actions_relative = actions_relative.squeeze(0)
-    
-    return actions_relative
-
-
-def convert_actions_to_absolute(actions_relative, qpos, state_body_dim=31):
-    """
-    Convert relative actions back to absolute actions (inverse of convert_actions_to_relative).
-    
-    Args:
-        actions_relative: (T, action_dim) or (action_dim,) - relative actions
-                          action_dim = 55 (single hand) or 75 (both hands)
-        qpos: (state_dim,) - current state [state_body + state_hand(s)]
-              state_dim = 51 or 54 (single) or 71 or 74 (both)
-        state_body_dim: dimension of state_body (31 or 34)
-    
-    Returns:
-        actions_absolute: same shape as input - absolute actions
-    """
-    # Handle both batched (T, D) and single (D,) cases
-    is_batched = actions_relative.ndim == 2 if hasattr(actions_relative, 'ndim') else len(actions_relative.shape) == 2
-    if not is_batched:
-        if torch.is_tensor(actions_relative):
-            actions_relative = actions_relative.unsqueeze(0)
-        else:
-            actions_relative = actions_relative[None, :]
-    
-    # Clone/copy
-    if torch.is_tensor(actions_relative):
-        actions_absolute = actions_relative.clone()
-    else:
-        actions_absolute = np.copy(actions_relative)
-    
-    # Extract state components
-    if torch.is_tensor(qpos):
-        state_body = qpos[:state_body_dim]
-        state_hand_all = qpos[state_body_dim:]  # 20D (single) or 40D (both)
-    else:
-        state_body = qpos[:state_body_dim]
-        state_hand_all = qpos[state_body_dim:]
-    
-    # Body: convert matching dimensions back to absolute
-    if state_body_dim == 31:
-        actions_absolute[:, 3:5] = actions_relative[:, 3:5] + state_body[0:2]
-        actions_absolute[:, 6:35] = actions_relative[:, 6:35] + state_body[2:31]
-    
-    # Hand: convert back to absolute
-    hand_action_start = 35
-    hand_dim = len(state_hand_all)
-    
-    if hand_dim == 20:
-        # Single hand
-        actions_absolute[:, hand_action_start:hand_action_start+20] = \
-            actions_relative[:, hand_action_start:hand_action_start+20] + state_hand_all
-    elif hand_dim == 40:
-        # Both hands
-        state_hand_left = state_hand_all[:20]
-        state_hand_right = state_hand_all[20:40]
-        actions_absolute[:, 35:55] = actions_relative[:, 35:55] + state_hand_left
-        actions_absolute[:, 55:75] = actions_relative[:, 55:75] + state_hand_right
-    else:
-        raise ValueError(f"Unexpected hand dimension: {hand_dim}. Expected 20 (single) or 40 (both)")
-    
-    if not is_batched:
-        if torch.is_tensor(actions_absolute):
-            actions_absolute = actions_absolute.squeeze(0)
-        else:
-            actions_absolute = actions_absolute.squeeze(0)
-    
-    return actions_absolute
 
 
 class EpisodicDataset(torch.utils.data.Dataset):
@@ -193,8 +20,6 @@ class EpisodicDataset(torch.utils.data.Dataset):
         use_rgb=True,
         hand_side: str = "left",
         action_horizon: int = 0,
-        use_relative_actions: bool = False,
-        state_body_dim: int = 31,
     ):
         """
         Args:
@@ -205,8 +30,6 @@ class EpisodicDataset(torch.utils.data.Dataset):
             use_rgb: Whether to use RGB images
             hand_side: "left", "right", or "both"
             action_horizon: If >0, clamp action sequences to this length
-            use_relative_actions: If True, convert actions to relative (vs current state)
-            state_body_dim: Dimension of state_body (31 or 34)
         """
         super(EpisodicDataset).__init__()
         self.episode_ids = episode_ids  # List of (file_path, episode_id) tuples
@@ -220,11 +43,8 @@ class EpisodicDataset(torch.utils.data.Dataset):
         # If >0, always return action_data/is_pad with fixed length = action_horizon.
         # This should typically match ACT's chunk_size/num_queries to avoid huge padding in collate_fn.
         self.action_horizon = int(action_horizon) if int(action_horizon) > 0 else 0
-        self.use_relative_actions = use_relative_actions
-        self.state_body_dim = state_body_dim
         self.is_sim = None
-        self._cached_head_hw3 = None  # (H, W, 3), used for black-image fallback if HDF5 image chunks are corrupted
-        self._warned_corrupt_image = False
+        self._cached_head_hw3 = None
         self.__getitem__(0) # initialize self.is_sim
 
     def __len__(self):
@@ -273,9 +93,9 @@ class EpisodicDataset(torch.utils.data.Dataset):
                         start_ts = int(np.random.choice(episode_len))
 
                     # Load state at start_ts
-                    # qpos for single hand: 51-dim or 54-dim (state_body + state_wuji_hand_{left/right})
-                    # qpos for both hands: 71-dim or 74-dim (state_body + state_wuji_hand_left + state_wuji_hand_right)
-                    state_body = episode_group['state_body'][start_ts]  # (31 or 34,)
+                    # qpos for single hand: 51-dim (state_body[31] + state_hand[20])
+                    # qpos for both hands: 71-dim (state_body[31] + hand_left[20] + hand_right[20])
+                    state_body = episode_group['state_body'][start_ts]  # (31,)
                     
                     if self.hand_side == "both":
                         # Load both hands
@@ -290,7 +110,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
                         
                         state_hand_left = state_hand_left[start_ts]  # (20,)
                         state_hand_right = state_hand_right[start_ts]  # (20,)
-                        qpos = np.concatenate([state_body, state_hand_left, state_hand_right])  # 71 or 74-dim
+                        qpos = np.concatenate([state_body, state_hand_left, state_hand_right])  # 71-dim
                     else:
                         # Load single hand (left or right)
                         hand_state_key = f"state_wuji_hand_{self.hand_side}"
@@ -300,40 +120,12 @@ class EpisodicDataset(torch.utils.data.Dataset):
                                 f"Available keys: {list(episode_group.keys())}"
                             )
                         state_hand = episode_group[hand_state_key][start_ts]  # (20,)
-                        qpos = np.concatenate([state_body, state_hand])  # 51 or 54-dim
+                        qpos = np.concatenate([state_body, state_hand])  # 51-dim
 
-                    # Load image (only if needed)
                     if self.use_rgb:
-                        # Check image format (backward compatible: default to 'raw' if not specified)
-                        image_format = episode_group.attrs.get('image_format', 'raw')
-                        
-                        if image_format == 'jpeg':
-                            # Decode JPEG bytes to array
-                            jpeg_bytes = episode_group['head'][start_ts]  # variable-length uint8 array
-                            image = np.array(Image.open(BytesIO(jpeg_bytes)), dtype=np.uint8)  # (H, W, 3)
-                        else:
-                            # Load raw array directly (legacy format)
-                            # Image chunks can be corrupted; if so, fall back to a black image.
-                            try:
-                                image = episode_group['head'][start_ts]  # (H, W, 3)
-                                if isinstance(image, np.ndarray) and image.ndim == 3:
-                                    self._cached_head_hw3 = image.shape
-                            except OSError as e:
-                                # h5py read failed (often: inflate() failed). Use black image to keep training running.
-                                if not self._warned_corrupt_image:
-                                    print(f"[dataset] [WARN] corrupted image chunk detected; falling back to black image. err={e}")
-                                    self._warned_corrupt_image = True
-                                hw3 = self._cached_head_hw3
-                                if hw3 is None:
-                                    try:
-                                        # shape access doesn't require decompression
-                                        hw3 = tuple(episode_group['head'].shape[1:])
-                                    except Exception:
-                                        hw3 = (480, 640, 3)
-                                    self._cached_head_hw3 = hw3
-                                image = np.zeros(hw3, dtype=np.uint8)
+                        jpeg_bytes = episode_group['head'][start_ts]
+                        image = np.array(Image.open(BytesIO(jpeg_bytes)), dtype=np.uint8)
                     else:
-                        # Avoid reading image data at all; just use cached/default shape.
                         hw3 = self._cached_head_hw3
                         if hw3 is None:
                             try:
@@ -461,14 +253,6 @@ class EpisodicDataset(torch.utils.data.Dataset):
         action_data = torch.from_numpy(padded_action).float()
         is_pad = torch.from_numpy(is_pad).bool()
 
-        # Convert to relative actions if enabled (before normalization)
-        if self.use_relative_actions:
-            # qpos is the state at start_ts, used as reference for all actions in this chunk
-            action_data = convert_actions_to_relative(
-                action_data, 
-                qpos_data, 
-                state_body_dim=self.state_body_dim
-            )
 
         # channel last -> channel first: (1, H, W, C) -> (1, C, H, W)
         image_data = torch.einsum('k h w c -> k c h w', image_data)
@@ -600,55 +384,7 @@ def _load_episode_data(hdf5_file, episode_id, hand_side):
     return qpos, action
 
 
-def reindex_episodes_consecutive(dataset_path, output_path=None):
-    """
-    Rename episode indices to be consecutive (0, 1, 2, ...) in an HDF5 file.
-    
-    Args:
-        dataset_path: Path to input HDF5 file
-        output_path: Path to output HDF5 file. If None, modifies in place.
-    
-    Returns:
-        mapping: Dict mapping old episode IDs to new consecutive IDs
-    """
-    episode_ids = get_episode_ids(dataset_path)
-    
-    # Create mapping from old IDs to new consecutive IDs
-    mapping = {old_id: new_id for new_id, old_id in enumerate(episode_ids)}
-    
-    if output_path is None:
-        output_path = dataset_path
-    
-    if output_path == dataset_path:
-        # In-place modification: rename to temp keys first to avoid conflicts
-        with h5py.File(dataset_path, 'a') as f:
-            # Step 1: Rename all to temporary keys
-            for old_id in episode_ids:
-                old_key = f'episode_{old_id:04d}'
-                temp_key = f'_temp_episode_{old_id:04d}'
-                f.move(old_key, temp_key)
-            
-            # Step 2: Rename from temp keys to new consecutive keys
-            for old_id, new_id in mapping.items():
-                temp_key = f'_temp_episode_{old_id:04d}'
-                new_key = f'episode_{new_id:04d}'
-                f.move(temp_key, new_key)
-    else:
-        # Copy to new file with consecutive indices
-        with h5py.File(dataset_path, 'r') as src, h5py.File(output_path, 'w') as dst:
-            for old_id, new_id in mapping.items():
-                old_key = f'episode_{old_id:04d}'
-                new_key = f'episode_{new_id:04d}'
-                src.copy(old_key, dst, name=new_key)
-    
-    print(f"Reindexed {len(episode_ids)} episodes to consecutive indices 0-{len(episode_ids)-1}")
-    print(f"Mapping: {mapping}")
-    
-    return mapping
-
-
-def get_norm_stats(dataset_path, episode_ids, hand_side: str = "left", 
-                   use_relative_actions: bool = False, state_body_dim: int = 31):
+def get_norm_stats(dataset_path, episode_ids, hand_side: str = "left"):
     """
     Compute normalization statistics from HDF5 file(s)
 
@@ -656,8 +392,6 @@ def get_norm_stats(dataset_path, episode_ids, hand_side: str = "left",
         dataset_path: Path to HDF5 file (str) OR list of paths (multiple files)
         episode_ids: List of episode IDs (for single file) OR list of (file_path, episode_id) tuples
         hand_side: "left", "right", or "both" (select which hand state/action to use)
-        use_relative_actions: If True, convert actions to relative before computing stats
-        state_body_dim: Dimension of state_body (31 or 34)
     """
     hand_side = str(hand_side).lower().strip()
     assert hand_side in ["left", "right", "both"], \
@@ -691,32 +425,12 @@ def get_norm_stats(dataset_path, episode_ids, hand_side: str = "left",
                 all_qpos_data.append(torch.from_numpy(qpos))
                 all_action_data.append(torch.from_numpy(action))
 
-    # Convert actions to relative if needed (before computing statistics)
-    if use_relative_actions:
-        print(f"Converting actions to relative space for normalization (state_body_dim={state_body_dim})...")
-        all_action_data_converted = []
-        for qpos, action in zip(all_qpos_data, all_action_data):
-            # For each episode, convert each timestep's action to relative
-            # action[t] is relative to qpos[t]
-            action_relative = []
-            for t in range(len(action)):
-                # Use qpos[t] as reference for action[t]
-                action_t_relative = convert_actions_to_relative(
-                    action[t:t+1],  # (1, action_dim)
-                    qpos[t],         # (state_dim,)
-                    state_body_dim=state_body_dim
-                )
-                action_relative.append(action_t_relative)
-            action_relative = torch.cat(action_relative, dim=0)
-            all_action_data_converted.append(action_relative)
-        all_action_data = all_action_data_converted
-    
-    # CHANGE: Concatenate all episodes along timestep dimension instead of stacking
+    # Concatenate all episodes along timestep dimension instead of stacking
     # This handles variable episode lengths by treating all timesteps equally
     # Original shape after stack: (num_episodes, episode_len, dim) - FAILS with variable lengths
     # New shape after concat: (total_timesteps, dim) - WORKS with variable lengths
-    # For single hand: qpos (51 or 54), action (55)
-    # For both hands: qpos (71 or 74), action (75)
+    # For single hand: qpos (51), action (55)
+    # For both hands: qpos (71), action (75)
     all_qpos_data = torch.cat(all_qpos_data, dim=0)  # (total_timesteps, state_dim)
     all_action_data = torch.cat(all_action_data, dim=0)  # (total_timesteps, action_dim)
 
@@ -754,9 +468,6 @@ def get_norm_stats(dataset_path, episode_ids, hand_side: str = "left",
         "dataset_paths": dataset_paths_list,
         "num_episodes": len(episode_ids),
         "total_timesteps": int(all_qpos_data.shape[0]),
-        # Relative action configuration
-        "use_relative_actions": use_relative_actions,
-        "state_body_dim": state_body_dim,
     }
 
     return stats
@@ -820,8 +531,6 @@ def load_data(
     split_save_path: str = None,
     *,
     val_robot_only: bool = False,
-    use_relative_actions: bool = False,
-    state_body_dim: int = 31,
 ):
     """
     Load data from HDF5 file(s) and create dataloaders
@@ -836,8 +545,6 @@ def load_data(
         hand_side: "left", "right", or "both"
         split_save_path: Optional path to save train/val split for reproducibility
         val_robot_only: If True, use only robot episodes for validation
-        use_relative_actions: If True, use relative action space
-        state_body_dim: Dimension of state_body (31 or 34)
 
     Returns:
         train_dataloader, val_dataloader, norm_stats, is_sim
@@ -887,7 +594,7 @@ def load_data(
             val_set = set(val_episode_ids)
             train_episode_ids = [ep for ep in episode_ids if ep not in val_set]
         else:
-            print("[load_data] [WARN] val_robot_only requested but no robot dataset file matched (basename contains 'robot'). Using default val split.")
+            print("[load_data] ⚠️ val_robot_only requested but no robot dataset file matched (basename contains 'robot'). Using default val split.")
     
     # optionally save split to json for reproducibility
     if split_save_path is not None:
@@ -928,8 +635,6 @@ def load_data(
         dataset_paths, 
         episode_ids, 
         hand_side=hand_side,
-        use_relative_actions=use_relative_actions,
-        state_body_dim=state_body_dim,
     )
 
     # construct dataset and dataloader
@@ -944,8 +649,6 @@ def load_data(
         use_rgb=use_rgb,
         hand_side=hand_side,
         action_horizon=action_horizon,
-        use_relative_actions=use_relative_actions,
-        state_body_dim=state_body_dim,
     )
     val_dataset = EpisodicDataset(
         val_episode_ids,
@@ -955,8 +658,6 @@ def load_data(
         use_rgb=use_rgb,
         hand_side=hand_side,
         action_horizon=action_horizon,
-        use_relative_actions=use_relative_actions,
-        state_body_dim=state_body_dim,
     )
 
     # Use custom collate function to handle variable-length episodes
