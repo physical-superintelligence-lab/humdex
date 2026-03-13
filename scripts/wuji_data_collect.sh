@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "${SCRIPT_DIR}/../deploy_real"
+SCRIPT_DIR=$(dirname $(realpath $0))
+cd "${SCRIPT_DIR}/deploy_real"
 
 # Runtime configuration
-input_root="${SCRIPT_DIR}/../deploy_real/humdex_demonstration"     # root directory containing `**/episode_*/data.json`
-output_name="wuji_right"                                           # output NPZ file name
-hand_side="right"                                                  # which hand side to export: left, right, or both
-max_files=-1                                                       # max number of `data.json` files to process (`-1` means all)
+session_dir_name="right_hand_000"   # folder name under deploy_real/humdex_demonstration
+hand_side="right"                   # "left" / "right" / "both"
+output_name="wuji_right_000"
+output_dir="${SCRIPT_DIR}/wuji_policy/data"
+intermediate_root="${SCRIPT_DIR}/deploy_real/wuji_hand_policy_dataset_tmp/${output_name}_${hand_side}"
 
-python wuji_data_collect.py \
-  --input_root "${input_root}" \
-  --output_name "${output_name}" \
-  --hand_side "${hand_side}" \
-  --max_files "${max_files}" \
-  "$@"
-
-
-# will generate `wuji_policy/data/wuji_right.npz`
+python ../deploy_real/build_wuji_hand_policy_data.py \
+    --session_dir_name ${session_dir_name} \
+    --hand_side ${hand_side} \
+    --output_dir ${output_dir} \
+    --output_name ${output_name} \
+    --intermediate_root ${intermediate_root} \
+    --cleanup_intermediate
