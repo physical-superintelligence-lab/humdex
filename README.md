@@ -1,5 +1,6 @@
 # HumDex: Humanoid Dexterous Manipulation Made Easy
-### By [Liang Heng](https://liangheng121.github.io/), [Yihe Tang](https://tangyihe.com/), [Jiajun Xu](https://georginhsu.github.io/), Henghui Bao, Di Huang, [Yue Wang](https://yuewang.xyz/)
+
+By [Liang Heng](https://liangheng121.github.io/), [Yihe Tang](https://tangyihe.com/), [Jiajun Xu](https://georginhsu.github.io/), Henghui Bao, Di Huang, [Yue Wang](https://yuewang.xyz/)
 
 <p align="center">
   <img src="./assets/demo.gif" alt="Banner for HumDex" width="90%">
