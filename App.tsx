@@ -1,24 +1,17 @@
 import React from 'react';
 import AnimatedBackground from './components/AnimatedBackground';
 import Section from './components/Section';
-import VideoCarousel from './components/VideoCarousel';
-import { CarouselItem } from './types';
+ 
 
-const BIBTEX = `@article{humdex2026,
-  title   = {HumDex: Humanoid Dexterous Manipulation Made Easy},
-  author  = {Liang Heng and Yihe Tang and Jiajun Xu and Henghui Bao and Di Huang and Yue Wang},
-  journal = {Conference Submission},
-  year    = {2026}
+const BIBTEX = `@misc{heng2026humdexhumanoiddexterousmanipulationeasy,
+      title={HumDex:Humanoid Dexterous Manipulation Made Easy}, 
+      author={Liang Heng and Yihe Tang and Jiajun Xu and Henghui Bao and Di Huang and Yue Wang},
+      year={2026},
+      eprint={2603.12260},
+      archivePrefix={arXiv},
+      primaryClass={cs.RO},
+      url={https://arxiv.org/abs/2603.12260}, 
 }`;
-
-const DEMO_VIDEOS: CarouselItem[] = [
-  {
-    id: 1,
-    description: 'HumDex whole-body dexterous manipulation demo.',
-    videoUrl: 'videos/demo.mp4',
-    posterUrl: 'figs/demo.png',
-  },
-];
 
 type ResultVideoItem = {
   id: number;
@@ -46,11 +39,11 @@ const INFERENCE_VIDEOS: ResultVideoItem[] = [
 
 const TELEOP_VIDEOS: ResultVideoItem[] = [
   // Supports both local paths and full HTTPS URLs.
-  { id: 1, title: 'Scan&Pack Teleoperation', videoUrl: 'videos/扫码-遥操-横.hq2.mp4' },
+  { id: 1, title: 'Scan&Pack Teleoperation', videoUrl: 'videos/抓面包-遥操-横.hq2.mp4' },
   { id: 2, title: 'Hang Towel Teleoperation', videoUrl: 'videos/挂毛巾-遥操-横.hq2.mp4' },
   { id: 3, title: 'Open Door Teleoperation', videoUrl: 'videos/开门-遥操.hq2.mp4' },
   { id: 4, title: 'Place Basket Teleoperation', videoUrl: 'videos/提篮子-遥操-横.hq2.mp4' },
-  { id: 5, title: 'Pick Bread Teleoperation', videoUrl: 'videos/抓面包-遥操-横.hq2.mp4' },
+  { id: 5, title: 'Pick Bread Teleoperation', videoUrl: 'videos/扫码-遥操-横.hq2.mp4' },
 ];
 
 const GENERALIZATION_VIDEOS: GeneralizationVideoItem[] = [
@@ -193,14 +186,11 @@ const App: React.FC = () => {
   const [selectedGeneralizations, setSelectedGeneralizations] = React.useState<
     Array<'Position' | 'Object' | 'Scene'>
   >(['Position']);
+  const [isIntroVideoStarted, setIsIntroVideoStarted] = React.useState(false);
   const asset = (path: string) => `${import.meta.env.BASE_URL}${encodeURI(path)}`;
+  const introPosterUrl = asset('figs/demo.png');
   const resolveVideoUrl = (url: string) =>
     /^https?:\/\//i.test(url) ? url : asset(url);
-  const videoItems = DEMO_VIDEOS.map((item) => ({
-    ...item,
-    videoUrl: item.videoUrl ? resolveVideoUrl(item.videoUrl) : undefined,
-    posterUrl: item.posterUrl ? resolveVideoUrl(item.posterUrl) : undefined,
-  }));
   const inferenceVideos = INFERENCE_VIDEOS.map((item) => ({
     ...item,
     videoUrl: item.videoUrl ? resolveVideoUrl(item.videoUrl) : undefined,
@@ -323,7 +313,39 @@ const App: React.FC = () => {
         <Section id="intro" title="Introduction" maxWidthClass="max-w-5xl">
           <div className="space-y-6">
             <div className="max-w-4xl mx-auto">
-              <VideoCarousel items={videoItems} />
+              <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black shadow-lg">
+                <div className="relative pt-[56.25%]">
+                  {isIntroVideoStarted ? (
+                    <iframe
+                      src="https://www.youtube.com/embed/6XBRbzo8hKs?autoplay=1"
+                      title="YouTube video player"
+                      className="absolute top-0 left-0 h-full w-full"
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsIntroVideoStarted(true)}
+                      className="absolute top-0 left-0 h-full w-full group"
+                      aria-label="Play introduction video"
+                    >
+                      <img
+                        src={introPosterUrl}
+                        alt="Introduction video cover"
+                        className="h-full w-full object-cover"
+                      />
+                      <span className="absolute inset-0 bg-black/35 group-hover:bg-black/25 transition-colors" />
+                      <span className="absolute inset-0 flex items-center justify-center">
+                        <span className="h-16 w-16 rounded-full bg-white/90 text-black text-2xl flex items-center justify-center shadow-lg">
+                          ▶
+                        </span>
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
             <p className="text-justify leading-relaxed text-gray-300">
               This paper investigates humanoid whole-body dexterous manipulation,

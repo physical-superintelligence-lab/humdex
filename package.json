@@ -7,8 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "vite build && gh-pages -d dist -b gh-pages --add",
-    "manual-deploy": "npm run build && cd dist && git init && git add -A && git commit -m \"Deploy\" && git push -f origin HEAD:gh-pages && cd .."
+    "deploy": "npm run build && git add -A docs && (git diff --cached --quiet && echo \"No docs changes to deploy\" || (git commit -m \"chore: deploy docs\" && git push origin website)) && node scripts/ensure-pages-docs.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",
@@ -17,7 +16,6 @@
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
-    "gh-pages": "^6.3.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
