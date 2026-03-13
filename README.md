@@ -1,28 +1,34 @@
 # HumDex: Humanoid Dexterous Manipulation Made Easy
-By Liang Heng, Yihe Tang, Jiajun Xu, Henghui Bao, Di Huang, Yue Wang
 
-![Banner for HumDex](./assets/HumDex.png)
+By [Liang Heng](https://liangheng121.github.io/), [Yihe Tang](https://tangyihe.com/), [Jiajun Xu](https://georginhsu.github.io/), Henghui Bao, Di Huang, [Yue Wang](https://yuewang.xyz/)
+
+<p align="center">
+  <img src="./assets/demo.gif" alt="Banner for HumDex" width="90%">
+</p>
 
 <p align="center">
   <a href="https://psi-lab.ai/humdex"><img src="https://img.shields.io/badge/project-page-brightgreen" alt="Project Page"></a>
   <a href="https://arxiv.org/abs/2603.12260"><img src="https://img.shields.io/badge/paper-arxiv-red" alt="Paper"></a>
   <a href="https://github.com/physical-superintelligence-lab/humdex/issues"><img src="https://img.shields.io/github/issues/physical-superintelligence-lab/humdex?color=yellow" alt="Issues"></a>
+  <a href="https://huggingface.co/heng222/humdex"><img src="https://img.shields.io/badge/model-HuggingFace-orange" alt="Hugging Face Model Card"></a>
 </p>
 
 ## Content Table
 
 - [Installation](#installation)
-- [Wuji Policy](#wuji-policy-geort)
 - [Teleop](#teleop)
 - [G1 Controller](#g1-controller)
 - [Wuji Hand Controller](#wuji-hand-controller)
+- [Wuji Policy](#wuji-policy)
 - [Data Collection](#data-collection)
+- [Policy Learning](#policy-learning)
+- [Citation](#citation)
 
 ---
 
 ## Installation
 
-We will have three conda environments for Humdex. The first is called `humdex`, which can be used for controller training, controller deployment, and teleop data collection. The second is called `gmr`, which can be used for online motion retargeting. The third is called `geort`, which can be used for wuji hand training.
+We will have two conda environments for Humdex. One is called `humdex`, which can be used for controller training, controller deployment, and teleop data collection. The other is called `gmr`, which can be used for online motion retargeting.
 
 ### 1) Create `gmr` Environment
 
@@ -48,13 +54,20 @@ conda create -n humdex python=3.8 -y
 conda activate humdex
 
 # install wuji-retargeting
-
 cd wuji-retargeting
 git submodule update --init --recursive
 pip install -r requirements.txt
-pip install -e .
+pip install -e . && cd ..
 
-pip install pyrealsense2
+# install wuji_policy
+cd wuji_policy
+pip install -r requirements.txt
+pip install -e . && cd ..
+
+# install for act
+cd act
+pip install -r requirements.txt
+cd ..
 ```
 
 For the rest of `humdex` environment setup, follow TWIST2 README:
@@ -63,20 +76,7 @@ For the rest of `humdex` environment setup, follow TWIST2 README:
 - [Step 3: Install Packages](https://github.com/LiangHeng121/TWIST2?tab=readme-ov-file#step-3-install-packages)
 - [Step 4: Install Unitree SDK2 for Laptop Sim2Real](https://github.com/LiangHeng121/TWIST2?tab=readme-ov-file#step-4-install-unitree-sdk2-for-laptop-sim2real)
 
-### 3) Create `geort` Environment
-
-Use a dedicated environment for Wuji hand policy training:
-
-```bash
-conda create -n geort python=3.10 -y
-conda activate geort
-
-cd wuji_policy
-pip install -r requirements.txt
-pip install -e .
-```
-
-### 4) Clone `GR00T-WholeBodyControl` (for sonic)
+### 3) Clone `GR00T-WholeBodyControl` (for sonic)
 
 ```bash
 cd ..
@@ -98,7 +98,7 @@ For a concise end-to-end setup flow, see [`doc/teleop.md`](doc/teleop.md).
 ```bash
 conda activate gmr
 
-bash teleop.sh [options] [-- extra_args]
+bash scripts/teleop.sh [options] [-- extra_args]
 ```
 
 Supported selectors:
@@ -112,19 +112,19 @@ Supported selectors:
 Run default combo:
 
 ```bash
-bash teleop.sh
+bash scripts/teleop.sh
 ```
 
 Run sonic + vdmocap + manus:
 
 ```bash
-bash teleop.sh --policy sonic --body vdmocap --hand manus
+bash scripts/teleop.sh --policy sonic --body vdmocap --hand manus
 ```
 
 Run twist2 + slimevr + vdhand:
 
 ```bash
-bash teleop.sh --policy twist2 --body slimevr --hand vdhand
+bash scripts/teleop.sh --policy twist2 --body slimevr --hand vdhand
 ```
 
 ### 3) Config Files
@@ -146,7 +146,7 @@ Config Structure:
 ### 4) Keyboard Behavior
 
 - `k`: toggle send/default mode
-- `p`: toggle hold mode
+- `p`: toggle send/hold mode
 
 ---
 
@@ -158,8 +158,10 @@ Config Structure:
 ## for --policy twist2
 conda activate humdex
 # Warm arp the redis server at first time
-bash run_motion_server.sh
-bash sim2sim.sh
+bash scripts/run_motion_server.sh
+bash scripts/sim2sim.sh
+
+
 
 ## for --policy sonic
 # Terminal 1 — MuJoCo simulator
@@ -178,9 +180,11 @@ bash deploy.sh sim --input-type zmq
 ```bash
 ## for --policy twist2
 conda activate humdex
-bash run_motion_server.sh
-# edit `net` in `sim2real.sh` to your real NIC name before running
-bash sim2real.sh
+bash scripts/run_motion_server.sh
+# edit `net` in `scripts/sim2real.sh` to your real NIC name before running
+bash scripts/sim2real.sh
+
+
 
 ## for --policy sonic
 cd ../GR00T-WholeBodyControl/gear_sonic_deploys
@@ -198,15 +202,69 @@ For Wuji device setup details, see [`doc/wuji.md`](doc/wuji.md).
 
 ```bash
 conda activate humdex
-bash wuji_hand_sim.sh
+bash scripts/wuji_hand_sim.sh
 ```
 
 ### 2) Real Hand Controller
 
 ```bash
 conda activate humdex
-bash wuji_hand_real.sh
+bash scripts/wuji_hand_real.sh
 ```
+
+---
+
+## Wuji Policy
+
+
+### 1) Build training `.npz` from collected data
+
+```bash
+conda activate humdex
+bash scripts/wuji_data_collect.sh
+```
+
+This generates:
+- `wuji_policy/data/wuji_right.npz`
+
+### 2) Training
+
+Data format (`.npz`) used by `wuji_policy/geort/trainer.py`:
+- required key: `fingertips_rel_wrist` with shape `[T, 5, 3]`
+- supervision key: `qpos`
+
+Example:
+
+```bash
+cd wuji_policy
+python geort/trainer.py \
+  -hand wuji_right \
+  -human_data wuji_right \
+  -ckpt_tag geort_wuji \
+  --qpos_key qpos \
+  --n_samples 20000 \
+  --batch_size 2048 \
+  --lr 1e-4 \
+  --save_every 10 \
+  --ckpt_root ./checkpoint
+```
+
+`-human_data` should match the output NPZ stem in `wuji_policy/data` (e.g., `wuji_right` for `wuji_right.npz`).
+
+For left hand, replace `wuji_right` with `wuji_left`.
+
+### 3) Inference
+
+The scripts in [Wuji Hand Controller](#wuji-hand-controller) use `wuji-retargeting` by default.
+To use a trained policy instead:
+
+1. In `wuji_hand_real.sh` and `wuji_hand_sim.sh`, set:
+   - `policy_tag` to your checkpoint tag
+   - `policy_epoch` to your checkpoint epoch (use `-1` for latest)
+2. In both scripts, uncomment:
+   - `--use_model`
+   - `--policy_tag ${policy_tag}`
+   - `--policy_epoch ${policy_epoch}`
 
 ---
 
@@ -217,52 +275,32 @@ For robot/human recording workflow and saved data layout, see [`doc/data_collect
 ### 1) Start Camera Stream on g1
 
 ```bash
-bash realsense_zmq_pub_g1.sh
+bash scripts/realsense_zmq_pub_g1.sh
 ```
 
-### 2) Keyboard Data Recording
+### 2) Teleop Data Recording
 
 ```bash
-bash data_record.sh
+bash scripts/data_record.sh
 
 # sonic channel
-bash data_record.sh --channel sonic
+bash scripts/data_record.sh --channel sonic
 ```
 
 ### 3) Human Data Recording
 
 ```bash
-bash data_record_human.sh
+bash scripts/data_record_human.sh
 
 # sonic channel
-bash data_record_human.sh --channel sonic
-
-# just collect hand data
-bash data_record_human.sh --use_realsense 0
-```
-
-### 4) Build Wuji Hand Policy Training NPZ
-
-If you want to obtain hand training data, you need to run this conversion step.
-
-```bash
-# session_dir_name hand_side output_name
-bash build_wuji_hand_policy_data.sh right_hand_000 right wuji_right_000
+bash scripts/data_record_human.sh --channel sonic
 ```
 
 ---
 
 ## Policy Learning
 
-### 1) Install
-
-```bash
-conda activate humdex
-cd act
-pip install -r requirements.txt
-```
-
-### 2) Data Processing
+### 1) Data Processing
 
 **a) Human data preprocessing:**
 
@@ -301,7 +339,7 @@ HDF5 per-episode structure:
 - `state_wuji_hand_{left,right}` (T, 20), `action_wuji_qpos_target_{left,right}` (T, 20)
 - `head` (T,) JPEG bytes
 
-### 3) Policy Training
+### 2) Policy Training
 
 ```bash
 cd act
@@ -329,21 +367,7 @@ python imitate_episodes.py \
 
 Checkpoint location: `<ckpt_root>/<task_name>/<timestamp>/`
 
-**Wuji hand retarget model training:**
-
-```bash
-cd ..
-# default: wuji_policy/data/wuji_right_000.npz -> checkpoint tag wuji_right_000
-bash wuji_hand_training.sh
-```
-
-Edit top variables in `wuji_hand_training.sh` to switch dataset/tag/hyperparameters:
-- `human_data_name`
-- `hand_config` (`wuji_right` / `wuji_left`)
-- `ckpt_tag`
-- `epoch`, `n_samples`, `batch_size`, `lr`, `save_every`
-
-### 4) Policy Inference
+### 3) Policy Inference
 
 **a) Offline evaluation (policy + dataset observations):**
 
@@ -387,3 +411,21 @@ python policy_inference.py init_pose \
 
 Publishes a fixed body+hand action from the dataset and holds until Ctrl-C.
 Use before `eval_online` to initialize the robot.
+
+---
+
+## Citation
+
+If you find this work useful, please cite:
+
+```bibtex
+@misc{heng2026humdexhumanoiddexterousmanipulationeasy,
+      title={HumDex:Humanoid Dexterous Manipulation Made Easy}, 
+      author={Liang Heng and Yihe Tang and Jiajun Xu and Henghui Bao and Di Huang and Yue Wang},
+      year={2026},
+      eprint={2603.12260},
+      archivePrefix={arXiv},
+      primaryClass={cs.RO},
+      url={https://arxiv.org/abs/2603.12260}, 
+}
+```
