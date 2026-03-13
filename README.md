@@ -18,6 +18,7 @@ By Liang Heng, Yihe Tang, Jiajun Xu, Henghui Bao, Di Huang, Yue Wang
 - [Wuji Policy](#wuji-policy)
 - [Data Collection](#data-collection)
 - [Policy Learning](#policy-learning)
+- [Citation](#citation)
 
 ---
 
@@ -407,3 +408,21 @@ python policy_inference.py init_pose \
 
 Publishes a fixed body+hand action from the dataset and holds until Ctrl-C.
 Use before `eval_online` to initialize the robot.
+
+---
+
+## Citation
+
+If you find this work useful, please cite:
+
+```bibtex
+@misc{heng2026humdexhumanoiddexterousmanipulationeasy,
+      title={HumDex:Humanoid Dexterous Manipulation Made Easy}, 
+      author={Liang Heng and Yihe Tang and Jiajun Xu and Henghui Bao and Di Huang and Yue Wang},
+      year={2026},
+      eprint={2603.12260},
+      archivePrefix={arXiv},
+      primaryClass={cs.RO},
+      url={https://arxiv.org/abs/2603.12260}, 
+}
+```
