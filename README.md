@@ -3,6 +3,12 @@ By Liang Heng, Yihe Tang, Jiajun Xu, Henghui Bao, Di Huang, Yue Wang
 
 ![Banner for HumDex](./assets/HumDex.png)
 
+<p align="center">
+  <a href="https://psi-lab.ai/humdex"><img src="https://img.shields.io/badge/project-page-brightgreen" alt="Project Page"></a>
+  <a href="https://arxiv.org/abs/2603.12260"><img src="https://img.shields.io/badge/paper-arxiv-red" alt="Paper"></a>
+  <a href="https://github.com/physical-superintelligence-lab/humdex/issues"><img src="https://img.shields.io/github/issues/physical-superintelligence-lab/humdex?color=yellow" alt="Issues"></a>
+</p>
+
 ## Content Table
 
 - [Installation](#installation)
