@@ -26,6 +26,8 @@ conda activate humdex
 bash scripts/run_motion_server.sh
 bash scripts/sim2sim.sh
 
+
+
 ## for --policy sonic
 # Terminal 1 — MuJoCo simulator
 cd ../GR00T-WholeBodyControl
@@ -45,6 +47,8 @@ bash deploy.sh sim --input-type zmq
 conda activate humdex
 bash scripts/run_motion_server.sh
 bash scripts/sim2real.sh
+
+
 
 ## for --policy sonic
 cd ../GR00T-WholeBodyControl/gear_sonic_deploys
