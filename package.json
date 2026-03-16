@@ -1,0 +1,22 @@
+{
+  "name": "video2act",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && git add -A docs && (git diff --cached --quiet && echo \"No docs changes to deploy\" || (git commit -m \"chore: deploy docs\" && git push origin website)) && node scripts/ensure-pages-docs.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}
