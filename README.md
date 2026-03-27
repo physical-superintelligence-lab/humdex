@@ -11,6 +11,7 @@ By [Liang Heng](https://liangheng121.github.io/), [Yihe Tang](https://tangyihe.c
   <a href="https://arxiv.org/abs/2603.12260"><img src="https://img.shields.io/badge/paper-arxiv-red" alt="Paper"></a>
   <a href="https://github.com/physical-superintelligence-lab/humdex/issues"><img src="https://img.shields.io/github/issues/physical-superintelligence-lab/humdex?color=yellow" alt="Issues"></a>
   <a href="https://huggingface.co/heng222/humdex"><img src="https://img.shields.io/badge/model-HuggingFace-orange" alt="Hugging Face Model Card"></a>
+  <a href="https://x.com/yuewang314/status/2037241216736383003?s=20"><img src="https://img.shields.io/badge/social-X-black" alt="X (Twitter)"></a>
 </p>
 
 ## News
