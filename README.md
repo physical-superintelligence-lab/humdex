@@ -13,6 +13,12 @@ By [Liang Heng](https://liangheng121.github.io/), [Yihe Tang](https://tangyihe.c
   <a href="https://huggingface.co/heng222/humdex"><img src="https://img.shields.io/badge/model-HuggingFace-orange" alt="Hugging Face Model Card"></a>
 </p>
 
+## News
+
+- **2026-03-27**. Xsens body teleoperation is available in HumDex (`body_source: xsens`).
+- **2026-03-16**. Manus hand tracking has been integrated into the teleop pipeline (`hand_source: manus`).
+- **2026-03-10**. Added Sonic teleoperation support (`policy: sonic`).
+
 ## Content Table
 
 - [Installation](#installation)
@@ -105,7 +111,7 @@ bash scripts/teleop.sh [options] [-- extra_args]
 Supported selectors:
 
 - `--policy {twist2|sonic}` (default `twist2`)
-- `--body {vdmocap|slimevr}` (default `vdmocap`)
+- `--body {vdmocap|slimevr|xsens}` (default `vdmocap`)
 - `--hand {vdhand|manus}` (default `vdhand`)
 
 ### 2) Common Examples
@@ -128,6 +134,12 @@ Run twist2 + slimevr + vdhand:
 bash scripts/teleop.sh --policy twist2 --body slimevr --hand vdhand
 ```
 
+Run twist2 + xsens + vdhand:
+
+```bash
+bash scripts/teleop.sh --policy twist2 --body xsens --hand vdhand
+```
+
 ### 3) Config Files
 
 Main YAML:
@@ -140,7 +152,7 @@ Config Structure:
 - `network`: redis + mocap transport (`network.redis`, `network.mocap.default/body/hand`)
 - `retarget`: retarget core settings (`actual_human_height`, `hands`, `format`, `offset_to_ground`)
 - `control`: runtime control settings (`safe_idle_pose_id`, `ramp_*_seconds`, `ramp_ease`)
-- `adapters`: source-specific settings (`vdmocap`, `vdhand`, `manus`, `slimevr`)
+- `adapters`: source-specific settings (`vdmocap`, `vdhand`, `manus`, `slimevr`, `xsens`)
 - `policy`: policy-specific settings (`policy.sonic`, `policy.twist2`)
 
 

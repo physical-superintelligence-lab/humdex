@@ -224,7 +224,7 @@ class VdmocapRuntimeConfig:
     safe_idle_pose_id: str
 
 
-def build_vdmocap_runtime(cfg: VdmocapRuntimeConfig) -> Dict[str, Any]:
+def build_vdmocap_runtime(cfg: VdmocapRuntimeConfig, *, build_retargeter: bool = True) -> Dict[str, Any]:
     from deploy_real.pose_csv_loader import (  # type: ignore
         apply_bvh_like_coordinate_transform,
         apply_geo_to_bvh_official,
@@ -239,11 +239,6 @@ def build_vdmocap_runtime(cfg: VdmocapRuntimeConfig) -> Dict[str, Any]:
         SmoothFilter,
     )
 
-    retargeter = GMR(
-        src_human=f"bvh_{cfg.format}",
-        tgt_robot="unitree_g1",
-        actual_human_height=float(cfg.actual_human_height),
-    )
     smooth_filter = SmoothFilter(enable=bool(cfg.smooth), window_size=max(1, int(cfg.smooth_window_size)))
 
     safe_ids = _parse_safe_idle_pose_ids(cfg.safe_idle_pose_id)
@@ -252,8 +247,7 @@ def build_vdmocap_runtime(cfg: VdmocapRuntimeConfig) -> Dict[str, Any]:
         for pid in safe_ids:
             safe_seq.append(list(SAFE_IDLE_BODY_35_PRESETS[int(pid)]))
 
-    return {
-        "retargeter": retargeter,
+    out: Dict[str, Any] = {
         "apply_geo_to_bvh_official": apply_geo_to_bvh_official,
         "apply_bvh_like_coordinate_transform": apply_bvh_like_coordinate_transform,
         "gmr_rename_and_footmod": gmr_rename_and_footmod,
@@ -262,4 +256,11 @@ def build_vdmocap_runtime(cfg: VdmocapRuntimeConfig) -> Dict[str, Any]:
         "smooth_filter": smooth_filter,
         "safe_idle_body_seq_35": safe_seq,
     }
+    if bool(build_retargeter):
+        out["retargeter"] = GMR(
+            src_human=f"bvh_{cfg.format}",
+            tgt_robot="unitree_g1",
+            actual_human_height=float(cfg.actual_human_height),
+        )
+    return out
 

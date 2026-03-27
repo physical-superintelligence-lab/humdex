@@ -13,11 +13,11 @@ Usage:
 
 Options:
   --policy {twist2|sonic}            default: twist2
-  --body_source {vdmocap|slimevr}    default: vdmocap
+  --body_source {vdmocap|slimevr|xsens}    default: vdmocap
   --hand_source {vdhand|manus}       default: vdhand
 
   # aliases
-  --body {vdmocap|slimevr}
+  --body {vdmocap|slimevr|xsens}
   --hand {vdhand|manus}
 
   -h, --help

@@ -88,7 +88,7 @@ bash scripts/teleop.sh [options] [-- extra_args]
 Supported selectors:
 
 - `--policy {twist2|sonic}` (default `twist2`)
-- `--body {vdmocap|slimevr}` (default `vdmocap`)
+- `--body {vdmocap|slimevr|xsens}` (default `vdmocap`)
 - `--hand {vdhand|manus}` (default `vdhand`)
 
 Common examples:
@@ -102,6 +102,9 @@ bash scripts/teleop.sh --policy sonic --body vdmocap --hand manus
 
 # twist2 + slimevr + vdhand
 bash scripts/teleop.sh --policy twist2 --body slimevr --hand vdhand
+
+# twist2 + xsens + vdhand
+bash scripts/teleop.sh --policy twist2 --body xsens --hand vdhand
 ```
 
 Keyboard controls during teleop:

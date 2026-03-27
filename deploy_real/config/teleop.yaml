@@ -64,6 +64,12 @@ adapters:
     vmc_fk_skeleton: "bvh"                                       # FK skeleton type: bvh/std
     vmc_bvh_path: "assets/slimevr/bvh-recording.bvh"             # BVH skeleton file used by FK
     vmc_bvh_scale: 0.01                                          # BVH global scale factor
+  xsens:
+    listen_ip: "0.0.0.0"                                         # UDP listen IP for MVN network stream
+    listen_port: 9763                                            # UDP listen port (MVN default)
+    socket_timeout_s: 0.05                                       # Socket recv timeout in seconds
+    character_id_filter: -1                                      # -1 accepts all characters; otherwise exact character id
+    drop_incomplete_samples: true                                # Drop a sample when last datagram arrives but body segments are incomplete
 
 policy:
   sonic:

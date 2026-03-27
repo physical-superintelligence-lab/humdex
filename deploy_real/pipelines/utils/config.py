@@ -52,6 +52,11 @@ class CommonRuntimeConfig:
     vmc_fk_skeleton: str
     vmc_bvh_path: str
     vmc_bvh_scale: float
+    xsens_listen_ip: str
+    xsens_listen_port: int
+    xsens_socket_timeout_s: float
+    xsens_character_id_filter: int
+    xsens_drop_incomplete_samples: bool
     manus_address: str
     manus_left_sn: str
     manus_right_sn: str
@@ -123,6 +128,11 @@ _LEGACY_FLAT_KEYS = {
     "vmc_fk_skeleton",
     "vmc_bvh_path",
     "vmc_bvh_scale",
+    "xsens_listen_ip",
+    "xsens_listen_port",
+    "xsens_socket_timeout_s",
+    "xsens_character_id_filter",
+    "xsens_drop_incomplete_samples",
     "manus_address",
     "manus_left_sn",
     "manus_right_sn",
@@ -189,6 +199,11 @@ _COMMON_REQUIRED_PATHS = [
     "adapters.slimevr.vmc_fk_skeleton",
     "adapters.slimevr.vmc_bvh_path",
     "adapters.slimevr.vmc_bvh_scale",
+    "adapters.xsens.listen_ip",
+    "adapters.xsens.listen_port",
+    "adapters.xsens.socket_timeout_s",
+    "adapters.xsens.character_id_filter",
+    "adapters.xsens.drop_incomplete_samples",
 ]
 _SONIC_REQUIRED_PATHS = [
     "policy.sonic.zmq_bind_host",
@@ -273,6 +288,7 @@ def _validate_nested_schema(yaml_cfg: Dict[str, Any], yaml_path: Path) -> None:
         "adapters.vdhand",
         "adapters.manus",
         "adapters.slimevr",
+        "adapters.xsens",
     ]:
         val = _get_nested(yaml_cfg, section_path)
         if not isinstance(val, Mapping):
@@ -338,6 +354,11 @@ def _build_common_values(yaml_cfg: Dict[str, Any], yaml_path: Path, *, repo_root
         "vmc_fk_skeleton": str(g("adapters.slimevr.vmc_fk_skeleton")),
         "vmc_bvh_path": _resolve_repo_path(repo_root, str(g("adapters.slimevr.vmc_bvh_path"))),
         "vmc_bvh_scale": float(g("adapters.slimevr.vmc_bvh_scale")),
+        "xsens_listen_ip": str(g("adapters.xsens.listen_ip")),
+        "xsens_listen_port": int(g("adapters.xsens.listen_port")),
+        "xsens_socket_timeout_s": max(0.005, float(g("adapters.xsens.socket_timeout_s"))),
+        "xsens_character_id_filter": int(g("adapters.xsens.character_id_filter")),
+        "xsens_drop_incomplete_samples": bool(g("adapters.xsens.drop_incomplete_samples")),
         "manus_address": str(g("adapters.manus.address")),
         "manus_left_sn": str(g("adapters.manus.left_sn")),
         "manus_right_sn": str(g("adapters.manus.right_sn")),

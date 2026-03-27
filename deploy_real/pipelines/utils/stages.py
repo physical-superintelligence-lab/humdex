@@ -19,6 +19,10 @@ from deploy_real.adapters.body.slimevr_adapter import (
     SlimevrBodyConfig,
     SlimevrBodyReader,
 )
+from deploy_real.adapters.body.xsens_adapter import (
+    XsensBodyConfig,
+    XsensBodyReader,
+)
 from deploy_real.adapters.hand.vdhand_adapter import (
     VdhandConfig,
     VdhandReader,
@@ -122,6 +126,7 @@ def init_source_readers(
             br.initialize()
             components["body_reader"] = br
             components["body_sdk_ready"] = True
+            components["body_source_kind"] = "vdmocap"
         except Exception as e:  # pragma: no cover - env dependent
             components["sdk_error"] = str(e)
     elif selection.body_adapter.endswith("slimevr_adapter"):
@@ -142,6 +147,35 @@ def init_source_readers(
             br.initialize()
             components["body_reader"] = br
             components["body_sdk_ready"] = True
+            components["body_source_kind"] = "slimevr"
+        except Exception as e:  # pragma: no cover - env dependent
+            components["sdk_error"] = str(e)
+    elif selection.body_adapter.endswith("xsens_adapter"):
+        try:
+            # Keep xsens on a single native path.
+            br = XsensBodyReader(
+                XsensBodyConfig(
+                    listen_ip=str(cfg.xsens_listen_ip),
+                    listen_port=int(cfg.xsens_listen_port),
+                    socket_timeout_s=float(cfg.xsens_socket_timeout_s),
+                    character_id_filter=int(cfg.xsens_character_id_filter),
+                    drop_incomplete_samples=bool(cfg.xsens_drop_incomplete_samples),
+                    axis_swap="xyz",
+                    axis_flip="",
+                    use_bvh_fk=False,
+                    use_viewer_fk=False,
+                    fk_rot_mode="local",
+                    bvh_path="assets/slimevr/bvh-recording.bvh",
+                    bvh_scale=0.01,
+                    bone_axis_override="",
+                    swap_lr_legs=False,
+                    quat_order="wxyz",
+                )
+            )
+            br.initialize()
+            components["body_reader"] = br
+            components["body_sdk_ready"] = True
+            components["body_source_kind"] = "xsens"
         except Exception as e:  # pragma: no cover - env dependent
             components["sdk_error"] = str(e)
     if selection.hand_adapter.endswith("vdhand_adapter"):
@@ -297,7 +331,8 @@ def _build_motion_runtimes(cfg: Any, selection: Any) -> tuple[Dict[str, Any], Di
             smooth=bool(cfg.smooth),
             smooth_window_size=int(cfg.smooth_window_size),
             safe_idle_pose_id=str(cfg.safe_idle_pose_id),
-        )
+        ),
+        build_retargeter=False,
     )
     if selection.hand_adapter.endswith("manus_adapter"):
         hand_runtime = build_manus_runtime(ManusRuntimeConfig())
@@ -327,18 +362,33 @@ def _apply_safe_idle_from_runtime(state: Any, body_runtime: Dict[str, Any], *, u
         state.context["safe_idle_body_seq_35"] = [list(state.safe_idle_body_35)]
 
 
-def _retarget_body_frame(comps: Dict[str, Any], cfg: Any, fr: Any) -> tuple[Any, Any, str]:
+def _retarget_body_frame(comps: Dict[str, Any], cfg: Any, fr: Any) -> tuple[Any, Any, Any, str]:
     if fr is None or (not bool(comps.get("gmr_ready", False))):
-        return None, None, "no_body_or_gmr"
+        return None, None, None, "no_body_or_gmr"
     try:
         fr_local = dict(fr)
-        fr_local = comps["apply_bvh_like_coordinate_transform"](fr_local, pos_unit="m", apply_rotation=True)
+        body_source_kind = str(comps.get("body_source_kind", "")).lower()
+        if body_source_kind == "xsens":
+            br = comps.get("body_reader", None)
+            if isinstance(br, XsensBodyReader):
+                fr_gmr = br.to_gmr_human_frame(fr_local)
+            else:
+                return None, None, None, "error:invalid_xsens_body_reader"
+            qpos = comps["retargeter"].retarget(fr_gmr, offset_to_ground=bool(cfg.offset_to_ground))
+            return qpos, fr_local, fr_gmr, "ok"
+        elif body_source_kind == "vdmocap":
+            # Keep parity with legacy xdmocap_teleop_body_to_redis.py:
+            # geo->bvh official remap first, then fixed BVH->GMR axis rotation.
+            fr_local = comps["apply_geo_to_bvh_official"](fr_local)
+            fr_local = comps["apply_bvh_like_coordinate_transform"](fr_local, pos_unit="m", apply_rotation=True)
+        else:
+            # Keep slimevr/vdmocap on the existing downstream processing path.
+            fr_local = comps["apply_bvh_like_coordinate_transform"](fr_local, pos_unit="m", apply_rotation=True)
         fr_gmr = comps["gmr_rename_and_footmod"](fr_local, fmt=str(cfg.format))
         qpos = comps["retargeter"].retarget(fr_gmr, offset_to_ground=bool(cfg.offset_to_ground))
-        return qpos, fr_gmr, "ok"
+        return qpos, fr_local, fr_gmr, "ok"
     except Exception as e:
-        return None, None, f"error:{e}"
-
+        return None, None, None, f"error:{e}"
 
 def _compute_hand_activity(state: Any, cfg: Any) -> tuple[int, str, bool]:
     now_ms = int(time.time() * 1000)
@@ -408,8 +458,13 @@ def _init_common_policy_components(
         from general_motion_retargeting import GeneralMotionRetargeting as GMR  # type: ignore
         from general_motion_retargeting import human_head_to_robot_neck  # type: ignore
 
+        src_human = "xsens_mvn" if str(components.get("body_source_kind", "")).lower() == "xsens" else f"bvh_{cfg.format}"
+        print(
+            f"[{policy}_pipeline] gmr src_human={src_human} "
+            f"body_source_kind={str(components.get('body_source_kind', ''))}"
+        )
         components["retargeter"] = GMR(
-            src_human=f"bvh_{cfg.format}",
+            src_human=src_human,
             tgt_robot="unitree_g1",
             actual_human_height=float(cfg.actual_human_height),
         )
@@ -753,7 +808,8 @@ def _stage_retarget_common(
     with_sonic_fields: bool,
 ) -> None:
     comps = state.context["components"]
-    qpos, fr_gmr, retarget_status = _retarget_body_frame(comps, cfg, state.context.get("body_frame", None))
+    fr_raw = state.context.get("body_frame", None)
+    qpos, fr_local, fr_gmr, retarget_status = _retarget_body_frame(comps, cfg, fr_raw)
     state.context["retarget_status"] = retarget_status
     out = _compute_retarget_outputs(
         state=state,

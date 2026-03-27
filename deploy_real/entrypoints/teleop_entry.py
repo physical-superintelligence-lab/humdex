@@ -10,7 +10,9 @@ from deploy_real.pipelines.pipeline import build_pipeline_instance, resolve_pipe
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Unified teleop entry (router-only v1).")
     parser.add_argument("--policy", choices=["twist2", "sonic"], default="twist2")
-    parser.add_argument("--body_source", "--body", dest="body_source", choices=["vdmocap", "slimevr"], default="vdmocap")
+    parser.add_argument(
+        "--body_source", "--body", dest="body_source", choices=["vdmocap", "slimevr", "xsens"], default="vdmocap"
+    )
     parser.add_argument("--hand_source", "--hand", dest="hand_source", choices=["vdhand", "manus"], default="vdhand")
     parser.add_argument("passthrough", nargs=argparse.REMAINDER, help="Arguments after '--' will be forwarded.")
     return parser.parse_args()

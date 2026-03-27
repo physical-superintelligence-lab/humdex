@@ -30,6 +30,7 @@ def _resolve_body_adapter(body_source: str) -> str:
     mapping = {
         "vdmocap": "deploy_real.adapters.body.vdmocap_adapter",
         "slimevr": "deploy_real.adapters.body.slimevr_adapter",
+        "xsens": "deploy_real.adapters.body.xsens_adapter",
     }
     if body_source not in mapping:
         raise ValueError(f"Unsupported body_source for twist2 pipeline: {body_source}")
