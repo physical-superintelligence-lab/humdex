@@ -15,9 +15,9 @@ By [Liang Heng](https://liangheng121.github.io/), [Yihe Tang](https://tangyihe.c
 
 ## News
 
-- **2026-03-27**. Xsens body teleoperation is available in HumDex (`body_source: xsens`).
-- **2026-03-16**. Manus hand tracking has been integrated into the teleop pipeline (`hand_source: manus`).
-- **2026-03-10**. Added Sonic teleoperation support (`policy: sonic`).
+- **2026-03-27**. ***Xsens*** body teleoperation is available in HumDex (`body_source: xsens`).
+- **2026-03-16**. ***Manus*** hand tracking has been integrated into the teleop pipeline (`hand_source: manus`).
+- **2026-03-10**. Added ***Sonic*** teleoperation support (`policy: sonic`).
 
 ## Content Table
 
