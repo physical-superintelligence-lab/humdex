@@ -117,12 +117,6 @@ Supported selectors:
 
 ### 2) Common Examples
 
-Run default combo:
-
-```bash
-bash scripts/teleop.sh
-```
-
 Run sonic + vdmocap + manus:
 
 ```bash
@@ -135,10 +129,10 @@ Run twist2 + slimevr + vdhand:
 bash scripts/teleop.sh --policy twist2 --body slimevr --hand vdhand
 ```
 
-Run twist2 + xsens + vdhand:
+Run twist2 + xsens + manus:
 
 ```bash
-bash scripts/teleop.sh --policy twist2 --body xsens --hand vdhand
+bash scripts/teleop.sh --policy twist2 --body xsens --hand manus
 ```
 
 ### 3) Config Files
