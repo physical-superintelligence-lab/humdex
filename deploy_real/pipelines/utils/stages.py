@@ -122,6 +122,7 @@ def init_source_readers(
             br.initialize()
             components["body_reader"] = br
             components["body_sdk_ready"] = True
+            components["body_source_kind"] = "vdmocap"
         except Exception as e:  # pragma: no cover - env dependent
             components["sdk_error"] = str(e)
     elif selection.body_adapter.endswith("slimevr_adapter"):
@@ -142,6 +143,7 @@ def init_source_readers(
             br.initialize()
             components["body_reader"] = br
             components["body_sdk_ready"] = True
+            components["body_source_kind"] = "slimevr"
         except Exception as e:  # pragma: no cover - env dependent
             components["sdk_error"] = str(e)
     if selection.hand_adapter.endswith("vdhand_adapter"):
@@ -332,6 +334,11 @@ def _retarget_body_frame(comps: Dict[str, Any], cfg: Any, fr: Any) -> tuple[Any,
         return None, None, "no_body_or_gmr"
     try:
         fr_local = dict(fr)
+        body_source_kind = str(comps.get("body_source_kind", "")).lower()
+        if body_source_kind == "vdmocap":
+            # Keep parity with legacy xdmocap_teleop_body_to_redis.py:
+            # geo->bvh official remap first, then fixed BVH->GMR axis rotation.
+            fr_local = comps["apply_geo_to_bvh_official"](fr_local)
         fr_local = comps["apply_bvh_like_coordinate_transform"](fr_local, pos_unit="m", apply_rotation=True)
         fr_gmr = comps["gmr_rename_and_footmod"](fr_local, fmt=str(cfg.format))
         qpos = comps["retargeter"].retarget(fr_gmr, offset_to_ground=bool(cfg.offset_to_ground))
