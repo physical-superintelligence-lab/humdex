@@ -195,7 +195,7 @@ bash scripts/sim2real.sh
 
 
 ## for --policy sonic
-cd ../GR00T-WholeBodyControl/gear_sonic_deploys
+cd ../GR00T-WholeBodyControl/gear_sonic_deploy
 source scripts/setup_env.sh
 bash deploy.sh real --input-type zmq
 ```

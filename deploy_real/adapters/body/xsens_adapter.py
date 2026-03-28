@@ -81,6 +81,7 @@ class XsensBodyReader:
     _MAX_PENDING = 16
     _STALE_SECONDS = 1.5
     _SAMPLE_RESET_THRESHOLD = 2000
+    _MAX_READ_DATAGRAMS_PER_CALL = 256
 
     # Map MVN segment IDs to names matching our existing VDMocap/GMR flow.
     _BODY_ID_TO_NAME = {
@@ -402,9 +403,14 @@ class XsensBodyReader:
 
         self._prune_pending()
         deadline = time.time() + max(0.005, float(self.cfg.socket_timeout_s))
+        latest_out: Optional[Dict[str, Any]] = None
+        recv_count = 0
         while time.time() <= deadline:
+            if recv_count >= int(self._MAX_READ_DATAGRAMS_PER_CALL):
+                break
             try:
                 datagram, _addr = self.sock.recvfrom(65535)
+                recv_count += 1
             except socket.timeout:
                 break
             except Exception as e:
@@ -415,7 +421,10 @@ class XsensBodyReader:
                 continue
             out = self._consume_datagram(d)
             if out is not None:
-                return out
+                # Low-latency policy: keep draining and return the newest complete frame.
+                latest_out = out
+        if latest_out is not None:
+            return latest_out
         return {"ok": False, "reason": "no_update"}
 
     def close(self) -> None:

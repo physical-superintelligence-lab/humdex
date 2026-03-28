@@ -23,8 +23,8 @@ network:
       index: 1                                                   # Hand SDK stream index
 
 retarget:
-  actual_human_height: 1.45                                      # Human height used for GMR retarget scaling
-  hands: "both"                                                 # Active hands: left/right/both/none
+  actual_human_height: 1.6                                       # Human height used for GMR retarget scaling
+  hands: "both"                                                  # Active hands: left/right/both/none
   format: "nokov"                                                # Source skeleton format for GMR
   offset_to_ground: true                                         # Apply ground-height offset in retarget
 
