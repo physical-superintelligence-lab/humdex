@@ -25,7 +25,7 @@ Use a **Windows PC** and connect the official hardware through USB.
 
 Install the official Wi-Fi driver on the Windows PC first.
 
-Download it from [link](https://drive.google.com/file/d/1SCIezEEy2k8YOBB9VjTMO7oKLXqWLQaV/view?usp=sharing), then extract the package and run the installer.
+Download it from [link](https://drive.google.com/file/d/1SCIezEEy2k8YOBB9VjTMO7oKLXqWLQaV/view?usp=sharing), then extract the package and run the installer *xrusbser.inf*.
 
 ### 2.2 Install DreamsCapStudio
 
