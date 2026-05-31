@@ -17,6 +17,8 @@ After device setup is complete, choose the teleop combination in `teleop.sh` (`p
 
 Follow [`g1.md`](g1.md) first for robot-side preparation.
 
+> Sonic only: apply the low-latency controller patch before first use (see [README §3](../README.md#3-clone-gr00t-wholebodycontrol-for-sonic); background: [issue #60](https://github.com/NVlabs/GR00T-WholeBodyControl/issues/60)).
+
 ### 2.1 Sim Controller
 
 ```bash

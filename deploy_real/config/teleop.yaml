@@ -76,9 +76,9 @@ policy:
     zmq_bind_host: "0.0.0.0"                                     # ZMQ bind host for pose publisher
     zmq_pose_port: 5556                                          # ZMQ bind port for pose publisher
     zmq_pose_topic: "pose"                                       # ZMQ topic name for pose messages
-    zmq_num_frames_to_send: 1                                    # Number of pose frames packed per publish
-    zmq_frame_index_step: 2                                      # Frame-index increment between packed frames
-    zmq_use_mailbox: true                                        # Use mailbox thread for non-blocking ZMQ send
+    zmq_num_frames_to_send: 5                                    # Number of recent pose frames packed per publish
+    zmq_frame_index_step: 1                                      # Frame-index increment per publish
+    zmq_use_mailbox: false                                        # Use mailbox thread for non-blocking ZMQ send
     zmq_catch_up: true                                           # catch_up flag in pose payload
   twist2:
     smooth: false                                                # Enable body smoothing

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import deque
 from pathlib import Path
 import sys
 import threading
@@ -504,9 +505,7 @@ def _resolve_pack_pose_message() -> Any:
 
 def _enable_sonic_zmq(components: Dict[str, Any], cfg: Any) -> None:
     pack_pose_message = _resolve_pack_pose_message()
-    zmq_step = int(cfg.zmq_frame_index_step) if int(cfg.zmq_frame_index_step) > 0 else (
-        max(1, int(round(100.0 / float(cfg.target_fps)))) if float(cfg.target_fps) > 1e-6 else 1
-    )
+    zmq_step = int(cfg.zmq_frame_index_step) if int(cfg.zmq_frame_index_step) > 0 else 1
     if pack_pose_message is not None:
         components["zmq_publisher"] = create_zmq_pose_publisher(
             bind_host=str(cfg.zmq_bind_host),
@@ -761,22 +760,42 @@ def _publish_twist2_from_payload(
 
 
 def _build_sonic_zmq_payload(state: Any, cfg: Any, *, step: int, n_frames: int, frame0: int) -> Dict[str, Any]:
-    jp = np.asarray(
-        state.context.get("retarget_joint_pos29", np.zeros((29,), dtype=np.float32)),
-        dtype=np.float32,
-    ).reshape(1, 29)
-    bq = np.asarray(
-        state.context.get("retarget_body_quat_w", np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)),
-        dtype=np.float32,
-    ).reshape(1, 4)
+    hist = state.context.get("sonic_pose_hist", None)
+    use_hist = (
+        isinstance(hist, dict)
+        and isinstance(hist.get("joint_pos", None), deque)
+        and isinstance(hist.get("body_quat", None), deque)
+        and isinstance(hist.get("frame_index", None), deque)
+        and len(hist["joint_pos"]) > 0
+        and len(hist["joint_pos"]) == len(hist["body_quat"]) == len(hist["frame_index"])
+    )
+    if use_hist:
+        take_n = min(int(n_frames), len(hist["joint_pos"]))
+        jp = np.stack(list(hist["joint_pos"])[-take_n:], axis=0).astype(np.float32, copy=False)
+        bq = np.stack(list(hist["body_quat"])[-take_n:], axis=0).astype(np.float32, copy=False)
+        fidx = np.asarray(list(hist["frame_index"])[-take_n:], dtype=np.int64)
+        n_out = int(take_n)
+    else:
+        jp1 = np.asarray(
+            state.context.get("retarget_joint_pos29", np.zeros((29,), dtype=np.float32)),
+            dtype=np.float32,
+        ).reshape(1, 29)
+        bq1 = np.asarray(
+            state.context.get("retarget_body_quat_w", np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)),
+            dtype=np.float32,
+        ).reshape(1, 4)
+        jp = np.repeat(jp1, n_frames, axis=0)
+        bq = np.repeat(bq1, n_frames, axis=0)
+        fidx = np.asarray([frame0 + i * step for i in range(n_frames)], dtype=np.int64)
+        n_out = int(n_frames)
     payload: Dict[str, Any] = {
-        "joint_pos": np.repeat(jp, n_frames, axis=0),
-        "joint_vel": np.zeros((n_frames, 29), dtype=np.float32),
-        "body_quat_w": np.repeat(bq, n_frames, axis=0),
-        "frame_index": np.asarray([frame0 + i * step for i in range(n_frames)], dtype=np.int64),
-        "timestamp_realtime": np.asarray([time.time()] * n_frames, dtype=np.float64),
-        "heading_increment": np.asarray([0.0] * n_frames, dtype=np.float32),
-        "catch_up": np.asarray([bool(cfg.zmq_catch_up)] * n_frames, dtype=bool),
+        "joint_pos": jp,
+        "joint_vel": np.zeros((n_out, 29), dtype=np.float32),
+        "body_quat": bq,
+        "frame_index": fidx,
+        "timestamp_realtime": np.asarray([time.time()] * n_out, dtype=np.float64),
+        "heading_increment": np.asarray([0.0] * n_out, dtype=np.float32),
+        "catch_up": np.asarray([bool(cfg.zmq_catch_up)] * n_out, dtype=bool),
     }
     return payload
 
@@ -1022,6 +1041,26 @@ def sonic_stage_publish_body_zmq(state: Any, cfg: Any) -> None:
         body_35_pub = np.asarray(state.context.get("retarget_body_35", state.last_pub_body_35), dtype=np.float32).reshape(-1)
         if body_35_pub.shape[0] >= 35:
             state.context["retarget_joint_pos29"] = _mujoco29_to_isaaclab29(_mimic35_to_joint_pos29(body_35_pub))
+        hist = state.context.get("sonic_pose_hist", None)
+        if not isinstance(hist, dict):
+            hist_len = max(8, int(getattr(cfg, "zmq_num_frames_to_send", 1)) * 4)
+            hist = {
+                "joint_pos": deque(maxlen=hist_len),
+                "body_quat": deque(maxlen=hist_len),
+                "frame_index": deque(maxlen=hist_len),
+            }
+            state.context["sonic_pose_hist"] = hist
+        q_now = np.asarray(
+            state.context.get("retarget_joint_pos29", np.zeros((29,), dtype=np.float32)),
+            dtype=np.float32,
+        ).reshape(29)
+        bq_now = np.asarray(
+            state.context.get("retarget_body_quat_w", np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)),
+            dtype=np.float32,
+        ).reshape(4)
+        hist["joint_pos"].append(q_now.copy())
+        hist["body_quat"].append(bq_now.copy())
+        hist["frame_index"].append(int(state.zmq_frame_index))
         n_frames = max(1, int(getattr(cfg, "zmq_num_frames_to_send", 1)))
         step = max(1, int(comps.get("zmq_frame_index_step", 1)))
         frame0 = int(state.zmq_frame_index)
@@ -1030,7 +1069,7 @@ def sonic_stage_publish_body_zmq(state: Any, cfg: Any) -> None:
         if publish_status != "ok":
             state.context["zmq_publish_status"] = publish_status
             return
-        state.zmq_frame_index += max(1, step) * n_frames
+        state.zmq_frame_index += max(1, step)
         state.context["zmq_publish_status"] = "ok"
     except Exception as e:
         state.context["zmq_publish_status"] = f"error:{e}"

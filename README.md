@@ -16,6 +16,7 @@ By [Liang Heng](https://liangheng121.github.io/), [Yihe Tang](https://tangyihe.c
 
 ## News
 
+- **2026-05-30**. Fixed ***Sonic*** teleop turning and latency. Sonic users must apply a one-time [controller patch](#3-clone-gr00t-wholebodycontrol-for-sonic).
 - **2026-03-27**. ***Xsens*** body teleoperation is available in HumDex (`body_source: xsens`).
 - **2026-03-16**. ***Manus*** hand tracking has been integrated into the teleop pipeline (`hand_source: manus`).
 - **2026-03-10**. Added ***Sonic*** teleoperation support (`policy: sonic`).
@@ -94,6 +95,15 @@ git lfs pull
 ```
 
 Then follow the official [doc](https://nvlabs.github.io/GR00T-WholeBodyControl/) to install its environment.
+
+To lower teleop latency, patch line 3392 of `gear_sonic_deploy/src/g1/g1_deploy_onnx_ref/src/g1_deploy_onnx_ref.cpp` (in `CurrentFrameAdvancement()`), as discussed in the [Sonic latency issue #60](https://github.com/NVlabs/GR00T-WholeBodyControl/issues/60):
+
+```diff
+-  if (current_frame_ >= current_motion_->timesteps - saved_frame_for_observation_window_) {
++  constexpr int kStreamWindowCap = 10;
++  const int eff_window = std::min(saved_frame_for_observation_window_, kStreamWindowCap);
++  if (current_frame_ >= current_motion_->timesteps - eff_window) {
+```
 
 ---
 
