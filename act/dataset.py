@@ -19,6 +19,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
         use_rgb=True,
         hand_side: str = "left",
         action_horizon: int = 0,
+        channel: str = "twist2",
     ):
         """
         Args:
@@ -39,6 +40,8 @@ class EpisodicDataset(torch.utils.data.Dataset):
         self.hand_side = str(hand_side).lower().strip()
         assert self.hand_side in ["left", "right", "both"], \
             f"hand_side must be 'left', 'right', or 'both', got {hand_side!r}"
+        self.channel = str(channel).lower().strip()
+        self._body_action_key = "action_token" if self.channel == "sonic" else "action_body"
         # If >0, always return action_data/is_pad with fixed length = action_horizon.
         # This should typically match ACT's chunk_size/num_queries to avoid huge padding in collate_fn.
         self.action_horizon = int(action_horizon) if int(action_horizon) > 0 else 0
@@ -163,7 +166,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
                     action_start = max(0, start_ts - 1)  # "hack" alignment: previous action for state
                     action_len = episode_len - action_start
                     # Read only the tail slice [action_start:].
-                    action_body_ds = episode_group["action_body"]
+                    action_body_ds = episode_group[self._body_action_key]
                     body_dim = int(action_body_ds.shape[1])
                     
                     if self.hand_side == "both":
@@ -314,7 +317,7 @@ def get_num_episodes(dataset_path):
     return len(get_episode_ids(dataset_path))
 
 
-def _load_episode_data(hdf5_file, episode_id, hand_side):
+def _load_episode_data(hdf5_file, episode_id, hand_side, channel="twist2"):
     """
     Helper function to load qpos and action data from an episode.
     
@@ -354,8 +357,9 @@ def _load_episode_data(hdf5_file, episode_id, hand_side):
         state_hand_all = episode_group[hand_state_key][:]
         qpos = np.concatenate([state_body_all, state_hand_all], axis=1)
 
-    # Load action: action_body + action_wuji_qpos_target_{side}(s)
-    action_body_all = episode_group['action_body'][:]
+    # Load action: body action (action_body or sonic action_token) + action_wuji_qpos_target_{side}(s)
+    body_action_key = "action_token" if str(channel).lower() == "sonic" else "action_body"
+    action_body_all = episode_group[body_action_key][:]
     
     if hand_side == "both":
         # Load both hands' actions
@@ -381,7 +385,7 @@ def _load_episode_data(hdf5_file, episode_id, hand_side):
     return qpos, action
 
 
-def get_norm_stats(dataset_path, episode_ids, hand_side: str = "left"):
+def get_norm_stats(dataset_path, episode_ids, hand_side: str = "left", channel: str = "twist2"):
     """
     Compute normalization statistics from HDF5 file(s)
 
@@ -410,7 +414,7 @@ def get_norm_stats(dataset_path, episode_ids, hand_side: str = "left"):
         for file_path, ep_ids in episodes_by_file.items():
             with h5py.File(file_path, 'r') as f:
                 for episode_id in ep_ids:
-                    qpos, action = _load_episode_data(f, episode_id, hand_side)
+                    qpos, action = _load_episode_data(f, episode_id, hand_side, channel)
                     all_qpos_data.append(torch.from_numpy(qpos))
                     all_action_data.append(torch.from_numpy(action))
     else:
@@ -522,6 +526,7 @@ def load_data(
     batch_size_val,
     use_rgb=True,
     hand_side: str = "left",
+    channel: str = "twist2",
     split_save_path: str = None,
     *,
     val_robot_only: bool = False,
@@ -626,9 +631,10 @@ def load_data(
 
     # obtain normalization stats for qpos and action using all episode IDs
     norm_stats = get_norm_stats(
-        dataset_paths, 
-        episode_ids, 
+        dataset_paths,
+        episode_ids,
         hand_side=hand_side,
+        channel=channel,
     )
 
     # construct dataset and dataloader
@@ -643,6 +649,7 @@ def load_data(
         use_rgb=use_rgb,
         hand_side=hand_side,
         action_horizon=action_horizon,
+        channel=channel,
     )
     val_dataset = EpisodicDataset(
         val_episode_ids,
@@ -652,6 +659,7 @@ def load_data(
         use_rgb=use_rgb,
         hand_side=hand_side,
         action_horizon=action_horizon,
+        channel=channel,
     )
 
     # Use custom collate function to handle variable-length episodes

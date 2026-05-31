@@ -49,6 +49,7 @@ def main(args):
     dataset_path = args['dataset_path']
     use_rgb = not args['no_rgb']
     hand_side = args.get('hand_side', 'left')
+    channel = args.get('channel', 'twist2')
     sequential_training = args.get('sequential_training', False)
     epochs_per_dataset = args.get('epochs_per_dataset', None)
     ckpt_prefix = str(args.get('ckpt_prefix', '') or '').strip()
@@ -97,11 +98,12 @@ def main(args):
         folder = f"{ckpt_prefix}_{ts}" if ckpt_prefix else ts
         ckpt_dir = os.path.join(ckpt_root, task_name, folder)
 
-    state_body_dim = 31
+    state_body_dim = 29 if channel == "sonic" else 31
+    action_body_dim = 64 if channel == "sonic" else 35
     hand_dim = 20 if hand_side in ("left", "right") else 40
     state_dim = state_body_dim + hand_dim
     camera_names = ['head']
-    print(f"state_dim: {state_dim} (body={state_body_dim} + hand={hand_dim}), hand_side: {hand_side}")
+    print(f"channel: {channel} | state_dim: {state_dim} (body={state_body_dim} + hand={hand_dim}), action_body_dim: {action_body_dim}, hand_side: {hand_side}")
 
     # Auto-detect number of episodes
     num_episodes = get_num_episodes(dataset_paths)
@@ -124,7 +126,7 @@ def main(args):
             'nheads': 8,
             'camera_names': camera_names,
             'state_dim': state_dim,
-            'action_dim': 35 + hand_dim,
+            'action_dim': action_body_dim + hand_dim,
         }
         os.environ.setdefault("ACT_CHUNK_SIZE", str(int(args["chunk_size"])))
     elif policy_class == 'CNNMLP':
@@ -135,7 +137,7 @@ def main(args):
             'num_queries': 1,
             'camera_names': camera_names,
             'state_dim': state_dim,
-            'action_dim': 35 + hand_dim,
+            'action_dim': action_body_dim + hand_dim,
         }
     else:
         raise NotImplementedError(f"Unknown policy class: {policy_class}")
@@ -145,9 +147,10 @@ def main(args):
         'num_epochs': num_epochs,
         'state_dim': state_dim,
         'state_body_dim': state_body_dim,
-        'action_body_dim': 35,
+        'action_body_dim': action_body_dim,
         'hand_dim': hand_dim,
-        'total_action_dim': 35 + hand_dim,
+        'total_action_dim': action_body_dim + hand_dim,
+        'channel': channel,
         'lr': args['lr'],
         'policy_class': policy_class,
         'policy_config': policy_config,
@@ -184,7 +187,7 @@ def main(args):
                 hand_side=hand_side,
             )
             unified_norm_stats['state_body_dim'] = state_body_dim
-            unified_norm_stats['action_body_dim'] = 35
+            unified_norm_stats['action_body_dim'] = action_body_dim
             unified_stats_path = os.path.join(ckpt_dir, 'dataset_stats_unified.pkl')
             with open(unified_stats_path, 'wb') as f:
                 pickle.dump(unified_norm_stats, f)
@@ -218,7 +221,7 @@ def main(args):
             train_dataloader, val_dataloader, stage_stats, _ = load_data(
                 stage_datasets, None, camera_names,
                 batch_size_train, batch_size_val,
-                use_rgb=use_rgb, hand_side=hand_side,
+                use_rgb=use_rgb, hand_side=hand_side, channel=channel,
                 split_save_path=os.path.join(ckpt_dir, f"train_val_split_stage{stage_idx}.json"),
                 val_robot_only=bool(args.get("val_robot_only", False)),
             )
@@ -229,7 +232,7 @@ def main(args):
             else:
                 stats = stage_stats
                 stats['state_body_dim'] = state_body_dim
-                stats['action_body_dim'] = 35
+                stats['action_body_dim'] = action_body_dim
                 stats_path = os.path.join(ckpt_dir, f'dataset_stats_stage{stage_idx}.pkl')
                 with open(stats_path, 'wb') as f:
                     pickle.dump(stats, f)
@@ -288,7 +291,7 @@ def main(args):
         )
 
         stats['state_body_dim'] = state_body_dim
-        stats['action_body_dim'] = 35
+        stats['action_body_dim'] = action_body_dim
         stats_path = os.path.join(ckpt_dir, 'dataset_stats.pkl')
         with open(stats_path, 'wb') as f:
             pickle.dump(stats, f)
@@ -431,6 +434,7 @@ def train_bc(train_dataloader, val_dataloader, config, norm_stats=None,
     use_wandb = config.get('use_wandb', False)
     action_body_dim = config.get('action_body_dim', 35)
     hand_side = config.get('hand_side', 'left')
+    channel = config.get('channel', 'twist2')
     resume = bool(config.get('resume', False))
     resume_ckpt = config.get('resume_ckpt', None)
     resume_save_every = int(config.get('resume_save_every', 20))
@@ -535,20 +539,24 @@ def train_bc(train_dataloader, val_dataloader, config, norm_stats=None,
             print(f"[resume] start_epoch={start_epoch} >= num_epochs={num_epochs}, nothing to do.")
             return (start_epoch - 1, np.inf, deepcopy(policy.state_dict()))
 
-    # Initialize MuJoCo visualizers (optional, for training visualization)
+    # Initialize MuJoCo visualizers (optional, for training visualization).
+    # Token-level (sonic) body actions are latents, not joints — skip viz entirely.
     body_viz, hand_viz, hand_viz_right = None, None, None
-    try:
-        from sim_viz.visualizers import HumanoidVisualizer, HandVisualizer, get_default_paths
-        paths = get_default_paths()
-        body_viz = HumanoidVisualizer(paths['body_xml'], paths['body_policy'])
-        if hand_side == "both":
-            hand_viz = HandVisualizer(paths['left_hand_xml'], hand_side='left')
-            hand_viz_right = HandVisualizer(paths['right_hand_xml'], hand_side='right')
-        else:
-            hand_viz = HandVisualizer(paths[f'{hand_side}_hand_xml'], hand_side=hand_side)
-        print(f'{stage_label}Visualizers initialized (body + {hand_side} hand)')
-    except Exception as e:
-        print(f'{stage_label}Visualizers not available: {e}')
+    if channel == "sonic":
+        print(f'{stage_label}Token-level (sonic): skipping MuJoCo visualizers')
+    else:
+        try:
+            from sim_viz.visualizers import HumanoidVisualizer, HandVisualizer, get_default_paths
+            paths = get_default_paths()
+            body_viz = HumanoidVisualizer(paths['body_xml'], paths['body_policy'])
+            if hand_side == "both":
+                hand_viz = HandVisualizer(paths['left_hand_xml'], hand_side='left')
+                hand_viz_right = HandVisualizer(paths['right_hand_xml'], hand_side='right')
+            else:
+                hand_viz = HandVisualizer(paths[f'{hand_side}_hand_xml'], hand_side=hand_side)
+            print(f'{stage_label}Visualizers initialized (body + {hand_side} hand)')
+        except Exception as e:
+            print(f'{stage_label}Visualizers not available: {e}')
 
     train_history = []
     validation_history = []
@@ -725,6 +733,8 @@ if __name__ == '__main__':
                         help='Path(s) to HDF5 dataset file(s)')
     parser.add_argument('--hand_side', type=str, default='left', choices=['left', 'right', 'both'],
                         help='Which hand(s) to control')
+    parser.add_argument('--channel', type=str, default='twist2', choices=['twist2', 'sonic'],
+                        help='Data channel: twist2 (joint action_body) or sonic (token action_token)')
 
 
     # ACT-specific

@@ -57,11 +57,16 @@ def convert_episode_to_hdf5(
     timesteps = episode_data['data']
     num_timesteps = len(timesteps)
 
+    # Token-level (sonic) episodes store a 64-D encoder token as the body action
+    # (action_token) instead of a 35-D joint action_body. Detect and branch on it.
+    is_token = any(isinstance(ts, dict) and ts.get('action_token') is not None for ts in timesteps)
+
     # Initialize arrays for each data type
     state_body_list = []
     state_wuji_hand_left_list = []
     state_wuji_hand_right_list = []
     action_body_list = []
+    action_token_list = []
     action_wuji_qpos_target_left_list = []
     action_wuji_qpos_target_right_list = []
     rgb_images = []
@@ -86,8 +91,11 @@ def convert_episode_to_hdf5(
             state_wuji_hand_right_list.append(np.zeros((20,), dtype=np.float32))
             missing_right_count += 1
 
-        # Actions
-        action_body_list.append(np.array(ts['action_body'], dtype=np.float32))
+        # Actions: token-level stores a 64-D encoder token; joint stores 35-D action_body
+        if is_token:
+            action_token_list.append(np.array(ts['action_token'], dtype=np.float32))
+        else:
+            action_body_list.append(np.array(ts['action_body'], dtype=np.float32))
         action_wuji_qpos_target_left_list.append(np.array(ts['action_wuji_qpos_target_left'], dtype=np.float32))
         if 'action_wuji_qpos_target_right' in ts:
             action_wuji_qpos_target_right_list.append(np.array(ts['action_wuji_qpos_target_right'], dtype=np.float32))
@@ -106,6 +114,7 @@ def convert_episode_to_hdf5(
     state_wuji_hand_left = np.array(state_wuji_hand_left_list, dtype=np.float32)
     state_wuji_hand_right = np.array(state_wuji_hand_right_list, dtype=np.float32)
     action_body = np.array(action_body_list, dtype=np.float32)
+    action_token = np.array(action_token_list, dtype=np.float32)
     action_wuji_qpos_target_left = np.array(action_wuji_qpos_target_left_list, dtype=np.float32)
     action_wuji_qpos_target_right = np.array(action_wuji_qpos_target_right_list, dtype=np.float32)
     rgb = np.empty(len(rgb_images), dtype=object)
@@ -121,8 +130,12 @@ def convert_episode_to_hdf5(
                              compression=compression, compression_opts=compression_opts)
     hdf5_group.create_dataset('state_wuji_hand_right', data=state_wuji_hand_right,
                              compression=compression, compression_opts=compression_opts)
-    hdf5_group.create_dataset('action_body', data=action_body,
-                             compression=compression, compression_opts=compression_opts)
+    if is_token:
+        hdf5_group.create_dataset('action_token', data=action_token,
+                                 compression=compression, compression_opts=compression_opts)
+    else:
+        hdf5_group.create_dataset('action_body', data=action_body,
+                                 compression=compression, compression_opts=compression_opts)
     hdf5_group.create_dataset('action_wuji_qpos_target_left', data=action_wuji_qpos_target_left,
                              compression=compression, compression_opts=compression_opts)
     hdf5_group.create_dataset('action_wuji_qpos_target_right', data=action_wuji_qpos_target_right,
@@ -132,6 +145,7 @@ def convert_episode_to_hdf5(
     hdf5_group.create_dataset('head', data=rgb, dtype=dt)
 
     hdf5_group.attrs['num_timesteps'] = num_timesteps
+    hdf5_group.attrs['body_action_repr'] = 'token' if is_token else 'joint'
     hdf5_group.attrs['episode_dir'] = os.path.basename(episode_dir)
     hdf5_group.attrs['has_right_hand'] = (missing_right_count == 0)
     hdf5_group.attrs['missing_right_hand_count'] = int(missing_right_count)

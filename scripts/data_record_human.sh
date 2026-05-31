@@ -6,9 +6,6 @@ cd "${SCRIPT_DIR}/../deploy_real"
 
 channel="twist2"   # twist2 | sonic
 redis_ip="localhost"
-body_zmq_ip="127.0.0.1"
-body_zmq_port=5556
-body_zmq_topic="pose"
 
 data_frequency=30
 task_name_base=$(date +"%Y%m%d_%H%M")
@@ -21,9 +18,6 @@ retarget_config_right="${SCRIPT_DIR}/../wuji-retargeting/example/config/retarget
 
 python server_data_record_human.py \
   --channel "${channel}" \
-  --body_zmq_ip "${body_zmq_ip}" \
-  --body_zmq_port "${body_zmq_port}" \
-  --body_zmq_topic "${body_zmq_topic}" \
   --task_name "${task_name}" \
   --redis_ip "${redis_ip}" \
   --frequency "${data_frequency}" \

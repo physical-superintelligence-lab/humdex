@@ -70,11 +70,22 @@ def _to_builtin(x: Any) -> Any:
     return x
 
 
-class SonicBodyZmqSource:
-    def __init__(self, ip: str, port: int, topic: str):
+class SonicStateZmqSource:
+    """Subscribe to the GR00T deploy state stream (ZMQOutputHandler).
+
+    Stream: ZMQ PUB, msgpack, default topic 'g1_debug' on port 5557, published
+    every control tick by gear_sonic_deploy. Each message is
+    [topic_bytes][msgpack-map]. Used for token-level recording:
+      - body_q_measured (29,) -> proprioceptive body state (state_body)
+      - token_state     (64,) -> encoder token (action_token)
+    """
+
+    def __init__(self, ip: str, port: int, topic: str = "g1_debug"):
         import zmq  # type: ignore
+        import msgpack  # type: ignore
 
         self._zmq = zmq
+        self._msgpack = msgpack
         self._ctx = zmq.Context()
         self._sock = self._ctx.socket(zmq.SUB)
         self._sock.setsockopt(zmq.LINGER, 0)
@@ -82,59 +93,24 @@ class SonicBodyZmqSource:
         self._sock.setsockopt(zmq.CONFLATE, 1)
         self._sock.setsockopt_string(zmq.SUBSCRIBE, str(topic))
         self._sock.connect(f"tcp://{ip}:{int(port)}")
-        self._topic = str(topic)
+        self._topic_bytes = str(topic).encode("utf-8")
         self._latest: Optional[Dict[str, Any]] = None
-        self._unpack_fn = None
-        for mod in [
-            "gear_sonic.utils.teleop.zmq.zmq_planner_sender",
-            "gear_sonic.utils.zmq_utils",
-        ]:
-            try:
-                m = __import__(mod, fromlist=["unpack_pose_message"])
-                fn = getattr(m, "unpack_pose_message", None)
-                if callable(fn):
-                    self._unpack_fn = fn
-                    break
-            except Exception:
-                continue
-
-    def _decode(self, raw_msg: bytes) -> Dict[str, Any]:
-        payload = raw_msg
-        if raw_msg.startswith((self._topic + " ").encode("utf-8")):
-            payload = raw_msg.split(b" ", 1)[1]
-        decoded: Any = None
-        if callable(self._unpack_fn):
-            try:
-                decoded = self._unpack_fn(raw_msg)  # type: ignore[misc]
-            except Exception:
-                decoded = None
-        if decoded is None:
-            try:
-                decoded = json.loads(payload.decode("utf-8"))
-            except Exception:
-                decoded = None
-        return {
-            "timestamp_ms": now_ms(),
-            "topic": self._topic,
-            "decoded": _to_builtin(decoded) if decoded is not None else None,
-            "raw_b64": base64.b64encode(payload).decode("ascii"),
-        }
 
     def get_latest(self) -> Optional[Dict[str, Any]]:
         zmq = self._zmq
-        updated = False
         while True:
             try:
                 raw = self._sock.recv(flags=zmq.NOBLOCK)
-                self._latest = self._decode(raw)
-                updated = True
             except zmq.Again:
                 break
             except Exception:
                 break
-        if updated or (self._latest is not None):
-            return dict(self._latest) if isinstance(self._latest, dict) else self._latest
-        return None
+            payload = raw[len(self._topic_bytes):] if raw.startswith(self._topic_bytes) else raw
+            try:
+                self._latest = self._msgpack.unpackb(payload, raw=False)
+            except Exception:
+                pass
+        return self._latest
 
     def close(self):
         try:
@@ -376,9 +352,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--frequency", type=int, default=30)
     p.add_argument("--robot_key", default="unitree_g1_with_hands")
     p.add_argument("--channel", choices=["twist2", "sonic"], default="twist2")
-    p.add_argument("--body_zmq_ip", default="127.0.0.1")
-    p.add_argument("--body_zmq_port", type=int, default=5556)
-    p.add_argument("--body_zmq_topic", default="pose")
+    p.add_argument("--state_zmq_ip", default="127.0.0.1", help="GR00T deploy state-stream IP (token-level sonic recording)")
+    p.add_argument("--state_zmq_port", default=5557, type=int, help="GR00T deploy state-stream port (ZMQOutputHandler, default 5557)")
+    p.add_argument("--state_zmq_topic", default="g1_debug", help="GR00T deploy state-stream topic (default g1_debug)")
     p.add_argument("--no_window", action="store_true", help="Disable preview window (keyboard control unavailable in no-window mode)")
     p.add_argument("--record_on_start", action="store_true", help="Start recording immediately on launch (useful with --no_window)")
 
@@ -396,7 +372,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--local_wuji_write_redis", type=int, default=1, help="Write local retarget output back to Redis (0/1)")
 
-    # local wuji mode: DexPilot retarget (default) vs GeoRT model inference
+    # local wuji mode: Wuji retarget (default) vs Wuji policy inference
     p.add_argument("--local_wuji_use_model", type=int, default=0, help="Use GeoRT model inference for local wuji target generation (0/1, default=0)")
     # Keep argument names aligned with deploy2.py / wuji_hand_model_deploy.sh.
     p.add_argument("--local_wuji_policy_tag", type=str, default="geort_filter_wuji", help="Local GeoRT model tag (--local_wuji_use_model=1)")
@@ -566,12 +542,12 @@ def main() -> int:
         for k in cands:
             if k not in flat_keys:
                 flat_keys.append(k)
-    body_zmq: Optional[SonicBodyZmqSource] = None
+    state_src: Optional[SonicStateZmqSource] = None
     if use_body_zmq:
-        body_zmq = SonicBodyZmqSource(
-            ip=str(args.body_zmq_ip),
-            port=int(args.body_zmq_port),
-            topic=str(args.body_zmq_topic),
+        state_src = SonicStateZmqSource(
+            ip=str(args.state_zmq_ip),
+            port=int(args.state_zmq_port),
+            topic=str(args.state_zmq_topic),
         )
 
     window_name = "TWIST2 OneClick Recorder (r=start/stop, q=quit)"
@@ -689,13 +665,15 @@ def main() -> int:
                 except Exception as e:
                     print(f"[WARN] Redis read error: {e}")
                     continue
-                if body_zmq is not None:
-                    zmq_packet = body_zmq.get_latest()
-                    data["body_zmq"] = zmq_packet
-                    if isinstance(zmq_packet, dict):
-                        decoded = zmq_packet.get("decoded", None)
-                        if isinstance(decoded, dict):
-                            data["body_zmq_decoded"] = decoded
+                # Token-level sonic: measured body state + encoder token from the
+                # GR00T deploy state stream (ZMQOutputHandler, topic g1_debug).
+                if state_src is not None:
+                    st = state_src.get_latest()
+                    if isinstance(st, dict):
+                        bq = st.get("body_q_measured")
+                        tok = st.get("token_state")
+                        data["state_body"] = list(bq) if bq is not None else None
+                        data["action_token"] = list(tok) if tok else None
 
 
                 # Local retarget: hand_tracking_* -> action_wuji_qpos_target_* (even without wuji_server)
@@ -863,8 +841,8 @@ def main() -> int:
         except Exception:
             pass
         try:
-            if body_zmq is not None:
-                body_zmq.close()
+            if state_src is not None:
+                state_src.close()
         except Exception:
             pass
         try:

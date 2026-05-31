@@ -16,7 +16,7 @@ By [Liang Heng](https://liangheng121.github.io/), [Yihe Tang](https://tangyihe.c
 
 ## News
 
-- **2026-05-30**. Fixed ***Sonic*** teleop turning and latency. Sonic users must apply a one-time [controller patch](#3-clone-gr00t-wholebodycontrol-for-sonic).
+- **2026-05-31**. ***Sonic*** channel: fixed teleop turning and latency (apply the one-time [controller patch](#3-clone-gr00t-wholebodycontrol-for-sonic)), and added token-level data collection, training, and inference.
 - **2026-03-27**. ***Xsens*** body teleoperation is available in HumDex (`body_source: xsens`).
 - **2026-03-16**. ***Manus*** hand tracking has been integrated into the teleop pipeline (`hand_source: manus`).
 - **2026-03-10**. Added ***Sonic*** teleoperation support (`policy: sonic`).
@@ -96,7 +96,7 @@ git lfs pull
 
 Then follow the official [doc](https://nvlabs.github.io/GR00T-WholeBodyControl/) to install its environment.
 
-To lower teleop latency, patch line 3392 of `gear_sonic_deploy/src/g1/g1_deploy_onnx_ref/src/g1_deploy_onnx_ref.cpp` (in `CurrentFrameAdvancement()`), as discussed in the [Sonic latency issue #60](https://github.com/NVlabs/GR00T-WholeBodyControl/issues/60):
+To lower teleop latency, patch line 3392 of `gear_sonic_deploy/src/g1/g1_deploy_onnx_ref/src/g1_deploy_onnx_ref.cpp` (in `CurrentFrameAdvancement()`), as discussed in the [Sonic issue #60](https://github.com/NVlabs/GR00T-WholeBodyControl/issues/60):
 
 ```diff
 -  if (current_frame_ >= current_motion_->timesteps - saved_frame_for_observation_window_) {
@@ -312,7 +312,7 @@ bash scripts/data_record_human.sh --channel sonic
 **a) Human data preprocessing:**
 
 For human tracking data, approximate proprioceptive state with previous-frame action.  
-Skip this step for robot data.
+Skip this step for robot data and sonic human data.
 
 ```bash
 cd act
@@ -342,7 +342,8 @@ python convert_to_hdf5.py \
 ```
 
 HDF5 per-episode structure:
-- `state_body` (T, 31), `action_body` (T, 35)
+- `state_body` (T, 31), `action_body` (T, 35) — twist2 (joint-level)
+- `state_body` (T, 29), `action_token` (T, 64) — sonic (token-level)
 - `state_wuji_hand_{left,right}` (T, 20), `action_wuji_qpos_target_{left,right}` (T, 20)
 - `head` (T,) JPEG bytes
 
@@ -369,6 +370,7 @@ python imitate_episodes.py \
 ```
 
 `--hand_side`: `left`, `right`, or `both`.  
+`--channel`: `twist2` (default, joint `action_body`) or `sonic` (token-level `action_token`).  
 `--sequential_training --epochs_per_dataset epoch_num_stage_1 epoch_num_stage_2`: train on multiple datasets sequentially.  
 `--resume --ckpt_dir ./checkpoints/my_task/<run_dir>`: resume from checkpoint.
 
@@ -377,7 +379,7 @@ Checkpoint location: `<ckpt_root>/<task_name>/<timestamp>/`
 
 ### 3) Policy Inference
 
-#### a) Offline evaluation
+#### a) Twist2 channel, Offline
 
 Run the policy on recorded dataset observations and render a side-by-side sim comparison video:
 
@@ -394,7 +396,9 @@ MUJOCO_GL=egl python policy_inference.py eval_offline \
 
 Output video is saved to `<ckpt_dir>/eval_ep{N}.mp4`. Use `--save_actions` to also dump predicted/GT actions as `.npy`. Set `MUJOCO_GL=egl` on headless servers.
 
-#### b) Online evaluation (real-time robot inference)
+#### b) Twist2 channel, Online
+
+Online inference drives the real robot — first start the G1 controller ([G1 Controller](#g1-controller)), the camera (`scripts/realsense_zmq_pub_g1.sh`), and the hand controller `scripts/wuji_hand_qpos_real.sh`.
 
 Our trained policy and robot initial poses are available at https://huggingface.co/heng222/humdex. 
 
@@ -404,7 +408,6 @@ Our trained policy and robot initial poses are available at https://huggingface.
 cd act
 python policy_inference.py init_pose \
   --init_pose_file ./checkpoints/my_task/init_pose.json \
-  --redis_ip <robot_ip> \
   --ramp_seconds 3.0
 ```
 
@@ -414,8 +417,7 @@ Alternatively, load from a dataset instead of JSON:
 
 ```bash
 python policy_inference.py init_pose \
-  --dataset /path/to/dataset.hdf5 --episode 0 --hand_side both \
-  --redis_ip <robot_ip>
+  --dataset /path/to/dataset.hdf5 --episode 0 --hand_side both
 ```
 
 **Step 2 — Run policy inference:**
@@ -426,11 +428,25 @@ python policy_inference.py eval_online \
   --ckpt_dir ./checkpoints/my_task/<run_dir> \
   --hand_side both \
   --chunk_size YOUR_CHUNK_SIZE \
-  --redis_ip <robot_ip> \
+  --vision_ip <robot_ip> \
   --temporal_agg
 ```
 
 Toggle inference on/off with keyboard (`k` = send, `p` = hold position, same as teleoperation).
+
+#### c) Sonic channel, Online
+
+Same prerequisites as above, but the body controller is the sonic `deploy.sh` (see [G1 Controller](#g1-controller)).
+
+```bash
+cd act
+python policy_inference_sonic.py \
+  --ckpt_dir ./checkpoints/my_task/<run_dir> \
+  --hand_side both \
+  --vision_ip <robot_ip>
+```
+
+`k` = send/stop, `p` = hold (same as teleop).
 
 ---
 
