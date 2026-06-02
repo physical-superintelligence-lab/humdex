@@ -373,10 +373,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--local_wuji_write_redis", type=int, default=1, help="Write local retarget output back to Redis (0/1)")
 
     # local wuji mode: Wuji retarget (default) vs Wuji policy inference
-    p.add_argument("--local_wuji_use_model", type=int, default=0, help="Use GeoRT model inference for local wuji target generation (0/1, default=0)")
+    p.add_argument("--local_wuji_use_model", type=int, default=0, help="Use learned model inference for local wuji target generation (0/1, default=0)")
     # Keep argument names aligned with deploy2.py / wuji_hand_model_deploy.sh.
-    p.add_argument("--local_wuji_policy_tag", type=str, default="geort_filter_wuji", help="Local GeoRT model tag (--local_wuji_use_model=1)")
-    p.add_argument("--local_wuji_policy_epoch", type=int, default=-1, help="Local GeoRT model epoch (--local_wuji_use_model=1)")
+    p.add_argument("--local_wuji_policy_tag", type=str, default="filter_wuji", help="Local learned model tag (--local_wuji_use_model=1)")
+    p.add_argument("--local_wuji_policy_epoch", type=int, default=-1, help="Local learned model epoch (--local_wuji_use_model=1)")
     p.add_argument("--local_wuji_policy_tag_left", type=str, default="", help="Left-hand tag (optional; empty uses local_wuji_policy_tag)")
     p.add_argument("--local_wuji_policy_epoch_left", type=int, default=-999999, help="Left-hand epoch (optional; -999999 uses local_wuji_policy_epoch)")
     p.add_argument("--local_wuji_policy_tag_right", type=str, default="", help="Right-hand tag (optional; empty uses local_wuji_policy_tag)")
@@ -717,7 +717,7 @@ def main() -> int:
                         mp21 = hand_26d_to_mediapipe_21d(hand_dict, hand_side=s)
                         mp_trans = apply_mediapipe_transformations(mp21, hand_type=s)
 
-                        # Choose DexPilot retarget (default) vs GeoRT model inference
+                        # Choose DexPilot retarget (default) vs learned model inference
                         if bool(int(args.local_wuji_use_model)):
                             if training_mod is None:
                                 return

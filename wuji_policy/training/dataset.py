@@ -26,7 +26,7 @@ class MultiPointDataset:
     def from_points(points, n, resample_to=50000, resample_resolution=0.001):
         """
         points: [Num_Fingers, Num_Samples, 3]
-        NOTE: 参数 n 在原实现中没有被使用（MultiPointDataset 的 len 由 resample_to 决定）
+        NOTE: the argument n is unused in the original implementation (MultiPointDataset length is determined by resample_to)
         """
         num_fingers = points.shape[0]
         all_points = []
@@ -39,7 +39,7 @@ class MultiPointDataset:
             resampled_points = np.asarray(downpcd.points)
 
             if resampled_points.shape[0] == 0:
-                # 退化情况：如果 voxel_down_sample 后没有点，回退到原始点
+                # degenerate case: if voxel_down_sample yields no points, fall back to the original points
                 resampled_points = np.asarray(pcd.points)
 
             all_points.append(upsample_array(resampled_points, K=resample_to))
@@ -56,11 +56,11 @@ class MultiPointDataset:
 
 class RobotKinematicsDataset:
     """
-    兼容两种数据格式：
+    Supports two data formats:
 
-    A) GeoRT 原生格式（npz keys: 'qpos', 'keypoint' (dict)）
-    B) 你的 wuji npz 格式（npz keys:
-        'action_wuji_qpos_target', 'fingertips_rel_wrist', 'fingertip_names', ...）
+    A) native format (npz keys: 'qpos', 'keypoint' (dict))
+    B) your wuji npz format (npz keys:
+        'action_wuji_qpos_target', 'fingertips_rel_wrist', 'fingertip_names', ...)
     """
 
     def __init__(self, qpos_keypoint_file, keypoint_names):
@@ -69,17 +69,17 @@ class RobotKinematicsDataset:
 
         self.keypoint_names = list(keypoint_names)
 
-        # ---------- Case A: 原生 GeoRT ----------
+        # ---------- Case A: native format ----------
         if "qpos" in npz.files and "keypoint" in npz.files:
-            self.mode = "geort_native"
+            self.mode = "native"
             self.qpos = npz["qpos"]  # [N, dof]
-            # keypoint 是 dict: {name: [N, 3 or ...]}
+            # keypoint is a dict: {name: [N, 3 or ...]}
             self.keypoints_dict = npz["keypoint"].item()
             self.available_keypoint_names = list(self.keypoints_dict.keys())
             self.n = len(self.qpos)
             return
 
-        # ---------- Case B: 你的 wuji npz ----------
+        # ---------- Case B: your wuji npz ----------
         required = ["action_wuji_qpos_target", "fingertips_rel_wrist"]
         for k in required:
             if k not in npz.files:
@@ -109,15 +109,15 @@ class RobotKinematicsDataset:
                 f"but fingertips_rel_wrist has {self.keypoints_array.shape[0]} frames"
             )
 
-        # 名称：npz 里通常有 fingertip_names: [F]
+        # names: the npz usually contains fingertip_names: [F]
         if "fingertip_names" in npz.files:
             self.fingertip_names = [str(x) for x in npz["fingertip_names"].tolist()]
         else:
-            # 如果没有，就用默认顺序名
+            # otherwise, fall back to default ordered names
             F = self.keypoints_array.shape[1]
             self.fingertip_names = [f"finger_{i}" for i in range(F)]
 
-        # 建立 name -> index 映射
+        # build name -> index mapping
         self.name_to_index = {name: i for i, name in enumerate(self.fingertip_names)}
 
         return
@@ -128,7 +128,7 @@ class RobotKinematicsDataset:
     def __getitem__(self, idx):
         qpos = self.qpos[idx].astype(np.float32)
 
-        if self.mode == "geort_native":
+        if self.mode == "native":
             keypoint_data = []
             for name in self.keypoint_names:
                 if name not in self.keypoints_dict:
@@ -143,12 +143,12 @@ class RobotKinematicsDataset:
         # mode == "wuji_npz"
         keypoint_data = []
 
-        # 优先按名字匹配；如果匹配不上，则按顺序回退（保证能跑，但建议你对齐命名）
+        # match by name first; if no match, fall back to positional order (works, but aligning names is recommended)
         for j, name in enumerate(self.keypoint_names):
             if name in self.name_to_index:
                 fi = self.name_to_index[name]
             else:
-                # 回退：按顺序选第 j 个 finger
+                # fallback: pick the j-th finger by order
                 fi = j
                 if fi >= self.keypoints_array.shape[1]:
                     raise KeyError(
@@ -163,17 +163,17 @@ class RobotKinematicsDataset:
 
     def export_robot_pointcloud(self, keypoint_names):
         """
-        训练代码里会用它做 Chamfer 的 target 点云。
-        在原版里，它返回 shape: [N_keypoints, N_samples, 3]
+        Used by the training code as the Chamfer target point cloud.
+        Returns shape: [N_keypoints, N_samples, 3]
         """
-        if self.mode == "geort_native":
+        if self.mode == "native":
             all_keypoint_data = []
             for keypoint_name in keypoint_names:
                 all_keypoint_data.append(self.keypoints_dict[keypoint_name])
             return np.array(all_keypoint_data)
 
         # mode == "wuji_npz"
-        # 这里返回 [K, T, 3]，其中 K = len(keypoint_names)
+        # returns [K, T, 3], where K = len(keypoint_names)
         all_keypoint_data = []
         for j, name in enumerate(keypoint_names):
             if name in self.name_to_index:
@@ -190,10 +190,10 @@ class RobotKinematicsDataset:
 
 
 if __name__ == "__main__":
-    # 示例：读取你的 wuji 数据
+    # example: load the wuji data
     ds = RobotKinematicsDataset(
-        qpos_keypoint_file="/home/jiajunxu/projects/humanoid_tele/data/your_wuji_file.npz",
-        keypoint_names=["thumb", "index", "middle", "ring", "pinky"],  # 你要按你的 fingertip_names 改
+        qpos_keypoint_file="/path/to/data/your_wuji_file.npz",
+        keypoint_names=["thumb", "index", "middle", "ring", "pinky"],  # adjust to match your fingertip_names
     )
     print("mode:", ds.mode)
     print("npz files:", ds.npz_files)

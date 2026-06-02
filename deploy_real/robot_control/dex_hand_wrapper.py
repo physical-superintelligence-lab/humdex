@@ -3,7 +3,7 @@ import sys
 import os
 
 # Add unitree_sdk2 python binding path
-unitree_sdk2_path = "/home/ANT.AMAZON.COM/yanjieze/lab42/src/unitree_sdk2/build/lib"
+unitree_sdk2_path = "/path/to/unitree_sdk2/build/lib"
 if os.path.exists(unitree_sdk2_path):
     sys.path.insert(0, unitree_sdk2_path)
 

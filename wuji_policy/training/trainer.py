@@ -123,7 +123,7 @@ class SupervisedRetargetDataset(Dataset):
         return torch.from_numpy(point), torch.from_numpy(qpos)
 
 
-class GeoRTTrainer:
+class RetargetingTrainer:
     def __init__(self, config):
         self.config = config
         self.hand = HandKinematicModel.build_from_config(self.config)
@@ -277,7 +277,7 @@ class GeoRTTrainer:
 
         hand_model_name = self.config["name"]
 
-        ckpt_root = Path(kwargs.get("ckpt_root", "/home/jiajunxu/projects/humanoid_tele/GeoRT/checkpoint"))
+        ckpt_root = Path(kwargs.get("ckpt_root", "/path/to/checkpoint"))
         run_name = f"{hand_model_name}_{generate_current_timestring()}"
         if exp_tag != "":
             run_name += f"_{exp_tag}"
@@ -366,12 +366,12 @@ if __name__ == "__main__":
 
     # checkpoint interval
     parser.add_argument("--save_every", type=int, default=10)
-    parser.add_argument("--ckpt_root", type=str, default="/home/jiajunxu/projects/humanoid_tele/GeoRT/checkpoint")
+    parser.add_argument("--ckpt_root", type=str, default="/path/to/checkpoint")
 
     args = parser.parse_args()
 
     config = get_config(args.hand)
-    trainer = GeoRTTrainer(config)
+    trainer = RetargetingTrainer(config)
 
     human_data_path = get_human_data(args.human_data)
     print("Training with human data:", human_data_path.as_posix())

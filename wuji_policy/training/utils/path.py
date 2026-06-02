@@ -7,7 +7,7 @@
 import os
 from pathlib import Path
 
-# GeoRT Package Path Helper.
+# Package Path Helper.
 # No more pain configuring paths!
 def get_package_root():
     current_dir = Path(os.path.dirname(os.path.realpath(__file__)))

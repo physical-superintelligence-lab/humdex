@@ -68,7 +68,7 @@ class EpisodeWriter():
         self.info = {
                 "version": "1.0.0" if version is None else version, 
                 "date": datetime.date.today().strftime('%Y-%m-%d') if date is None else date,
-                "author": "YanjieZe",
+                "author": "HumDex",
                 "image": {"width":self.image_shape[0], "height":self.image_shape[1], "fps":self.frequency},
             }
         

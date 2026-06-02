@@ -13,7 +13,7 @@ from training.utils.path import to_package_root, get_checkpoint_root
 from training.utils.config_utils import load_json, parse_config_keypoint_info, parse_config_joint_limit
 
 
-class GeoRTRetargetingModel:
+class RetargetingModel:
     '''
         Used by external programs.
     '''
@@ -26,7 +26,7 @@ class GeoRTRetargetingModel:
         self.model = IKModel(keypoint_joints=keypoint_info["joint"]).cuda()
         self.model.load_state_dict(torch.load(model_path))
         self.model.eval()
-        self.qpos_normalizer = HandFormatter(joint_lower_limit, joint_upper_limit) # GeoRT will do normalization.
+        self.qpos_normalizer = HandFormatter(joint_lower_limit, joint_upper_limit) # normalization is applied internally.
 
     def forward(self, keypoints):
         # keypoints: [N, 3]
@@ -58,7 +58,7 @@ def load_model(tag='', epoch=0):
         model_path = checkpoint_root / f"last.pth"
     
     config_path = checkpoint_root / "config.json"
-    return GeoRTRetargetingModel(model_path=model_path, config_path=config_path)
+    return RetargetingModel(model_path=model_path, config_path=config_path)
 
 if __name__ == '__main__':
     # load the model in one line.

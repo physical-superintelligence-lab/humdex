@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-One-click builder for Wuji / GeoRT supervised training data.
+One-click builder for Wuji supervised training data.
 
 Input:
 - deploy_real/humdex_demonstration/**/episode_*/data.json
@@ -187,7 +187,7 @@ def _resolve_output_path(output_name: Optional[str]) -> Path:
     if output_name:
         name = output_name if output_name.endswith(".npz") else f"{output_name}.npz"
     else:
-        name = "wuji_geort_merged.npz"
+        name = "wuji_merged.npz"
     return (DEFAULT_OUT_DIR / name).resolve()
 
 
@@ -331,7 +331,7 @@ def _build_one_episode_side(
 
 def _parse_args():
     parser = argparse.ArgumentParser(
-        description="Build one merged GeoRT/Wuji supervised dataset directly from humdex_demonstration data.json files."
+        description="Build one merged Wuji supervised dataset directly from humdex_demonstration data.json files."
     )
     parser.add_argument(
         "--input_root",

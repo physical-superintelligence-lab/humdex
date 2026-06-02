@@ -38,7 +38,7 @@ for _p in [WUJI_RETARGETING_V2_PATH, WUJI_RETARGETING_LEGACY_PATH]:
     if _p.exists() and str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-# Keep `wuji_retarget` importable for GeoRT model mode.
+# Keep `wuji_retarget` importable for learned model mode.
 WUJI_RETARGET_PATH = PROJECT_ROOT / "wuji_policy"
 if str(WUJI_RETARGET_PATH) not in sys.path:
     sys.path.insert(0, str(WUJI_RETARGET_PATH))
@@ -184,7 +184,7 @@ class WujiHandRedisController:
         serial_number: str = "",
         # mode switch
         use_model: bool = False,
-        model_tag: str = "geort_filter_wuji",
+        model_tag: str = "filter_wuji",
         model_epoch: int = -1,
         use_fingertips5: bool = True,
         # safety (model mode)
@@ -210,7 +210,7 @@ class WujiHandRedisController:
         self.smooth_steps = smooth_steps
         self.serial_number = (serial_number or "").strip()
 
-        # Mode: GeoRT model vs DexPilot retarget
+        # Mode: learned model vs DexPilot retarget
         self.use_model = bool(use_model)
         self.model_tag = str(model_tag)
         self.model_epoch = int(model_epoch)
@@ -270,7 +270,7 @@ class WujiHandRedisController:
         self._retarget_joint_names = []
 
         if self.use_model:
-            # GeoRT model inference
+            # learned model inference
             try:
                 import training  # type: ignore
             except Exception as e:
@@ -278,13 +278,13 @@ class WujiHandRedisController:
                     f"Failed to import training (check wuji_policy and PYTHONPATH): {e}"
                 )
             self._training = training
-            print(f"[INFO] Loading GeoRT model: tag={self.model_tag}, epoch={self.model_epoch}")
+            print(f"[INFO] Loading learned model: tag={self.model_tag}, epoch={self.model_epoch}")
             self.model = training.load_model(self.model_tag, epoch=self.model_epoch)
             try:
                 self.model.eval()
             except Exception:
                 pass
-            print("[OK] GeoRT model loaded.")
+            print("[OK] learned model loaded.")
         else:
             # YAML-configured retargeter
             if not self.config_path:
@@ -333,7 +333,7 @@ class WujiHandRedisController:
 
     def _model_infer_wuji_qpos(self, pts21: np.ndarray) -> np.ndarray:
         """
-        Run GeoRT inference.
+        Run learned-model inference.
           pts21: (21,3) after apply_mediapipe_transformations (wrist-relative)
           return: (5,4) joint targets
         """
@@ -703,25 +703,25 @@ Examples:
     )
 
     # =========================
-    # Retarget mode switch: DexPilot retarget (default) vs GeoRT model inference
+    # Retarget mode switch: DexPilot retarget (default) vs learned model inference
     # Aligned with `wuji_retarget/deploy2.py` and model deploy script.
     # =========================
     parser.add_argument(
         "--use_model",
         action="store_true",
-        help="Use GeoRT model inference (20D output) instead of DexPilot retarget",
+        help="Use learned model inference (20D output) instead of DexPilot retarget",
     )
     parser.add_argument(
         "--policy_tag",
         type=str,
-        default="geort_filter_wuji",
+        default="filter_wuji",
         help="Training model tag for training.load_model(tag, epoch) (--use_model)",
     )
     parser.add_argument(
         "--policy_epoch",
         type=int,
         default=-1,
-        help="GeoRT checkpoint epoch (--use_model). Use -1 for latest",
+        help="learned checkpoint epoch (--use_model). Use -1 for latest",
     )
     parser.add_argument(
         "--use_fingertips5",

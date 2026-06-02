@@ -208,7 +208,7 @@ class WujiHandSimRedisViz:
         freshness_ms: int,
         smooth_enabled: bool,
         smooth_steps: int,
-        # mode switch: DexPilot retarget (default) vs GeoRT model inference
+        # mode switch: DexPilot retarget (default) vs learned model inference
         use_model: bool,
         policy_tag: str,
         policy_epoch: int,
@@ -273,7 +273,7 @@ class WujiHandSimRedisViz:
         self.model_infer = None
 
         if self.use_model:
-            # GeoRT model inference (same API as deploy2.py)
+            # learned model inference (same API as deploy2.py)
             try:
                 wuji_retarget_path = project_root / "wuji_policy"
                 if str(wuji_retarget_path) not in sys.path:
@@ -282,13 +282,13 @@ class WujiHandSimRedisViz:
             except Exception as e:
                 raise RuntimeError(f"Cannot import training (wuji_policy/ must be on PYTHONPATH). Error: {e}") from e
 
-            print(f"[WujiHandSim] [INFO] load GeoRT model: tag={self.policy_tag}, epoch={self.policy_epoch}")
+            print(f"[WujiHandSim] [INFO] load learned model: tag={self.policy_tag}, epoch={self.policy_epoch}")
             self.model_infer = training.load_model(self.policy_tag, epoch=self.policy_epoch)
             try:
                 self.model_infer.eval()
             except Exception:
                 pass
-            print("[WujiHandSim] [OK] GeoRT model loaded")
+            print("[WujiHandSim] [OK] learned model loaded")
         else:
             if not self.config_path:
                 raise ValueError("Missing --config, cannot initialize modern Retargeter")
@@ -543,9 +543,9 @@ def parse_args() -> argparse.Namespace:
         help="Retarget YAML config path. If empty, use default by hand side: wuji-retargeting/example/config/retarget_manus_<hand>.yaml",
     )
     # mode switch (align with deploy2.py / wuji_hand_model_deploy.sh)
-    p.add_argument("--use_model", action="store_true", help="Use GeoRT model inference (default off; DexPilot retarget otherwise)")
-    p.add_argument("--policy_tag", type=str, default="geort_filter_wuji", help="GeoRT model tag (--use_model)")
-    p.add_argument("--policy_epoch", type=int, default=-1, help="GeoRT model epoch (--use_model)")
+    p.add_argument("--use_model", action="store_true", help="Use learned model inference (default off; DexPilot retarget otherwise)")
+    p.add_argument("--policy_tag", type=str, default="filter_wuji", help="learned model tag (--use_model)")
+    p.add_argument("--policy_epoch", type=int, default=-1, help="learned model epoch (--use_model)")
     p.add_argument("--use_fingertips5", action="store_true", help="Use 5 fingertips as model input (default enabled)")
     p.set_defaults(use_fingertips5=True)
     p.add_argument("--clamp_min", type=float, default=-1.5, help="Minimum clamp value for model output")
